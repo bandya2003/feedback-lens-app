@@ -22,6 +22,7 @@ import type {
   SentimentDataPoint,
   TopicSentimentDistribution
 } from '@/types/feedback';
+import { ThemeToggleButton } from '@/components/ThemeToggleButton';
 
 // Basic CSV parser (Consider using a library for robustness)
 function parseCSV(text: string): { headers: string[]; rows: RawFeedbackItem[] } {
@@ -392,9 +393,12 @@ export default function HomePage() {
         )}
       </main>
       <footer className="w-full text-center mt-auto py-6">
-        <p className="text-sm text-muted-foreground">
-          &copy; {new Date().getFullYear()} Feedback Lens. Powered by AI.
-        </p>
+        <div className="flex justify-center items-center space-x-4">
+          <p className="text-sm text-muted-foreground">
+            &copy; {new Date().getFullYear()} Feedback Lens. Powered by AI.
+          </p>
+          <ThemeToggleButton />
+        </div>
       </footer>
     </div>
   );
