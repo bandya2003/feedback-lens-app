@@ -8,7 +8,7 @@ import { Dashboard } from '@/components/feedback-lens/Dashboard';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Loader2, AlertCircle, Sparkles } from 'lucide-react';
+import { Loader2, AlertCircle, Sparkles, FileUp, Brain, BarChart3 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { analyzeFeedbackSentiment } from '@/ai/flows/analyze-feedback-sentiment';
 import { extractFeedbackTopics } from '@/ai/flows/extract-feedback-topics';
@@ -31,7 +31,27 @@ function parseCSV(text: string): { headers: string[]; rows: RawFeedbackItem[] } 
   const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
   
   const rows = lines.slice(1).map(line => {
-    const values = line.split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+    // Improved CSV parsing to handle commas within quoted fields
+    const values = [];
+    let inQuotes = false;
+    let currentValue = '';
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      if (char === '"') {
+        inQuotes = !inQuotes;
+        if (i + 1 < line.length && line[i+1] === '"') { // Handle escaped quotes ""
+          currentValue += '"';
+          i++; 
+        }
+      } else if (char === ',' && !inQuotes) {
+        values.push(currentValue.trim().replace(/^"|"$/g, ''));
+        currentValue = '';
+      } else {
+        currentValue += char;
+      }
+    }
+    values.push(currentValue.trim().replace(/^"|"$/g, '')); // Add the last value
+
     const row: RawFeedbackItem = {};
     headers.forEach((header, index) => {
       row[header] = values[index] || '';
@@ -151,7 +171,7 @@ export default function HomePage() {
           }
 
           processedCount++;
-          setAnalysisProgress(Math.round((processedCount / totalItems) * 50)); // Individual analyses make up 50%
+          setAnalysisProgress(Math.round((processedCount / totalItems) * 50)); 
 
           return {
             id: `fb-${index}-${Date.now()}`,
@@ -207,7 +227,7 @@ export default function HomePage() {
           }
           sentimentCountsByDate[dateStr][item.sentiment]++;
         } else if (item.sentiment) {
-           const overallDateKey = 'Overall'; // Use a consistent key for non-timestamped data
+           const overallDateKey = 'Overall'; 
            if (!sentimentCountsByDate[overallDateKey]) {
             sentimentCountsByDate[overallDateKey] = { positive: 0, negative: 0, neutral: 0 };
           }
@@ -216,16 +236,13 @@ export default function HomePage() {
       });
       
       let initialSentimentOverTimeData: SentimentDataPoint[];
-      // Check if there's only one key and it's 'Overall', or if no date-specific keys exist
       const dateKeys = Object.keys(sentimentCountsByDate);
       const hasOnlyOverall = dateKeys.length === 1 && dateKeys[0] === 'Overall';
       const hasDateSpecificData = dateKeys.some(key => key !== 'Overall');
 
-      if (hasOnlyOverall || !hasDateSpecificData) {
-        // If only 'Overall' data or no specific dates, create a single point for the chart
+      if (hasOnlyOverall || !hasDateSpecificData && dateKeys.length > 0) {
          initialSentimentOverTimeData = dateKeys.map(date => ({ date, ...sentimentCountsByDate[date] }));
       } else {
-        // Otherwise, filter out 'Overall' if date-specific data exists, then sort by date
         initialSentimentOverTimeData = Object.entries(sentimentCountsByDate)
           .filter(([date]) => date !== 'Overall')
           .map(([date, counts]) => ({ date, ...counts }))
@@ -266,7 +283,7 @@ export default function HomePage() {
       const generalErrorMessage = error instanceof Error ? error.message : String(error);
       setAnalysisError(`Analysis failed: ${generalErrorMessage}`);
       toast({ title: "Analysis Error", description: `Analysis process encountered an error: ${generalErrorMessage.substring(0,150)}`, variant: "destructive" });
-      setCurrentStage('map_columns'); // Or 'upload' if more appropriate reset
+      setCurrentStage('map_columns'); 
       setAnalysisProgress(0);
     }
   }, [csvRows, toast]);
@@ -285,7 +302,31 @@ export default function HomePage() {
   const renderContent = () => {
     switch (currentStage) {
       case 'upload':
-        return <FileUpload onFileSelect={handleFileSelect} />;
+        return (
+          <>
+            <FileUpload onFileSelect={handleFileSelect} />
+            <section className="mt-12 w-full max-w-4xl mx-auto">
+              <h2 className="text-3xl font-bold font-headline text-center mb-8 text-primary">How It Works</h2>
+              <div className="grid md:grid-cols-3 gap-8">
+                <div className="flex flex-col items-center text-center p-6 bg-card rounded-lg shadow-md">
+                  <FileUp className="w-12 h-12 text-accent mb-4" />
+                  <h3 className="text-xl font-semibold font-headline mb-2 text-foreground">1. Upload CSV</h3>
+                  <p className="text-muted-foreground text-sm">Provide your raw customer feedback.</p>
+                </div>
+                <div className="flex flex-col items-center text-center p-6 bg-card rounded-lg shadow-md">
+                  <Brain className="w-12 h-12 text-accent mb-4" />
+                  <h3 className="text-xl font-semibold font-headline mb-2 text-foreground">2. AI Analysis</h3>
+                  <p className="text-muted-foreground text-sm">Our AI analyzes sentiment, topics, and trends.</p>
+                </div>
+                <div className="flex flex-col items-center text-center p-6 bg-card rounded-lg shadow-md">
+                  <BarChart3 className="w-12 h-12 text-accent mb-4" />
+                  <h3 className="text-xl font-semibold font-headline mb-2 text-foreground">3. Visualize Insights</h3>
+                  <p className="text-muted-foreground text-sm">Explore your data in an interactive dashboard.</p>
+                </div>
+              </div>
+            </section>
+          </>
+        );
       case 'map_columns':
         return <ColumnSelector headers={csvHeaders} onAnalyze={handleAnalyze} isAnalyzing={currentStage === 'analyzing'} />;
       case 'analyzing':
@@ -342,10 +383,10 @@ export default function HomePage() {
           </Alert>
         )}
         {renderContent()}
-        {(currentStage === 'dashboard' || (currentStage === 'map_columns' && csvRows.length > 0)) && (
+        {(currentStage === 'dashboard' || (currentStage === 'map_columns' && csvRows.length > 0) || currentStage === 'upload') && (
           <div className="mt-8 text-center">
-            <Button variant="outline" onClick={handleReset}>
-              Analyze Another File
+            <Button variant="outline" onClick={handleReset} disabled={currentStage === 'upload' && !file}>
+              {currentStage === 'upload' && !file ? 'Start by Uploading a File' : 'Analyze Another File'}
             </Button>
           </div>
         )}
@@ -358,3 +399,4 @@ export default function HomePage() {
     </div>
   );
 }
+

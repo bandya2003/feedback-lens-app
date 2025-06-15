@@ -1,7 +1,9 @@
+
 import React, { useCallback, useState } from 'react';
 import { UploadCloud, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
 
 interface FileUploadProps {
   onFileSelect: (file: File) => void;
@@ -62,6 +64,12 @@ export function FileUpload({ onFileSelect, disabled }: FileUploadProps) {
     }
   };
 
+  const dropzoneBaseClasses = "flex flex-col items-center justify-center p-8 border-2 rounded-lg transition-colors";
+  const dropzoneDisabledClasses = "opacity-50 cursor-not-allowed border-dashed border-input-border";
+  const dropzoneEnabledClasses = "cursor-pointer";
+  const dropzoneDraggingClasses = "border-solid border-accent bg-accent/10";
+  const dropzoneIdleClasses = "border-dashed border-input-border hover:border-solid hover:border-accent";
+
   return (
     <Card className="w-full max-w-lg mx-auto shadow-lg">
       <CardHeader>
@@ -76,9 +84,13 @@ export function FileUpload({ onFileSelect, disabled }: FileUploadProps) {
           onDragLeave={handleDragLeave}
           onDragOver={handleDragOver}
           onDrop={handleDrop}
-          className={`flex flex-col items-center justify-center p-8 border-2 border-dashed rounded-lg transition-colors
-            ${dragging ? 'border-primary bg-primary/10' : 'border-input-border hover:border-accent'}
-            ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+          className={cn(
+            dropzoneBaseClasses,
+            disabled ? dropzoneDisabledClasses : [
+              dropzoneEnabledClasses,
+              dragging ? dropzoneDraggingClasses : dropzoneIdleClasses
+            ]
+          )}
           onClick={() => !disabled && document.getElementById('file-upload-input')?.click()}
           role="button"
           tabIndex={disabled ? -1 : 0}
@@ -100,8 +112,8 @@ export function FileUpload({ onFileSelect, disabled }: FileUploadProps) {
             </div>
           ) : (
             <div className="text-center">
-              <UploadCloud className={`w-16 h-16 mx-auto mb-3 ${dragging ? 'text-primary' : 'text-muted-foreground'}`} />
-              <p className={`font-semibold ${dragging ? 'text-primary' : 'text-foreground'}`}>
+              <UploadCloud className={`w-16 h-16 mx-auto mb-3 ${dragging ? 'text-accent' : 'text-muted-foreground'}`} />
+              <p className={`font-semibold ${dragging ? 'text-accent' : 'text-foreground'}`}>
                 {dragging ? 'Drop file here' : 'Drag & drop or click to upload'}
               </p>
               <p className="text-xs text-muted-foreground mt-1">CSV files only</p>
@@ -117,6 +129,12 @@ export function FileUpload({ onFileSelect, disabled }: FileUploadProps) {
         >
           {fileName ? 'Change File' : 'Select File'}
         </Button>
+        <p className="text-xs text-muted-foreground mt-3 text-center">
+          Your CSV should have a 'feedback' column. {' '}
+          <a href="/sample-feedback.csv" download="sample-feedback.csv" className="text-accent hover:underline font-medium">
+            Download a sample file.
+          </a>
+        </p>
       </CardContent>
     </Card>
   );
