@@ -111,8 +111,15 @@ export default function HomePage() {
              sentimentResult = await analyzeFeedbackSentiment({ feedbackText });
           } catch (e: any) {
             const errorMessage = e instanceof Error ? e.message : String(e);
-            console.error(`Sentiment analysis failed for item ${index}:`, errorMessage, e);
-            const userFriendlyMessage = errorMessage.includes("429 Too Many Requests") || errorMessage.includes("Quota")
+            const isRateLimitError = errorMessage.includes("429 Too Many Requests") || errorMessage.includes("Quota");
+
+            if (isRateLimitError) {
+                console.warn(`Sentiment analysis for item ${index+1} limited by API rate limits:`, errorMessage);
+            } else {
+                console.error(`Sentiment analysis failed for item ${index+1}:`, errorMessage, e);
+            }
+
+            const userFriendlyMessage = isRateLimitError
               ? `Sentiment analysis for item ${index+1} failed due to API rate limits. Its sentiment might be missing.`
               : `Sentiment analysis for item ${index+1} failed: ${errorMessage.substring(0,100)}. Check console.`;
             toast({
@@ -125,8 +132,15 @@ export default function HomePage() {
              topicsResult = await extractFeedbackTopics({ feedbackText });
           } catch (e: any) {
             const errorMessage = e instanceof Error ? e.message : String(e);
-            console.error(`Topic extraction failed for item ${index}:`, errorMessage, e);
-            const userFriendlyMessage = errorMessage.includes("429 Too Many Requests") || errorMessage.includes("Quota")
+            const isRateLimitError = errorMessage.includes("429 Too Many Requests") || errorMessage.includes("Quota");
+
+            if (isRateLimitError) {
+              console.warn(`Topic extraction for item ${index+1} limited by API rate limits:`, errorMessage);
+            } else {
+              console.error(`Topic extraction failed for item ${index+1}:`, errorMessage, e);
+            }
+            
+            const userFriendlyMessage = isRateLimitError
               ? `Topic extraction for item ${index+1} failed due to API rate limits. Its topics might be missing.`
               : `Topic extraction for item ${index+1} failed: ${errorMessage.substring(0,100)}. Check console.`;
             toast({
@@ -344,4 +358,3 @@ export default function HomePage() {
     </div>
   );
 }
-
