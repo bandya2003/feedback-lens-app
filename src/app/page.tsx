@@ -109,10 +109,32 @@ export default function HomePage() {
           let sentimentResult, topicsResult;
           try {
              sentimentResult = await analyzeFeedbackSentiment({ feedbackText });
-          } catch (e) { console.error("Sentiment analysis failed for item:", index, e); }
+          } catch (e: any) {
+            const errorMessage = e instanceof Error ? e.message : String(e);
+            console.error(`Sentiment analysis failed for item ${index}:`, errorMessage, e);
+            const userFriendlyMessage = errorMessage.includes("429 Too Many Requests") || errorMessage.includes("Quota")
+              ? `Sentiment analysis for an item failed due to API rate limits. Some sentiments might be missing.`
+              : `Sentiment analysis for an item failed: ${errorMessage.substring(0,100)}. Check console.`;
+            toast({
+              title: "Sentiment Analysis Limited",
+              description: userFriendlyMessage,
+              variant: "destructive"
+            });
+          }
           try {
              topicsResult = await extractFeedbackTopics({ feedbackText });
-          } catch (e) { console.error("Topic extraction failed for item:", index, e); }
+          } catch (e: any) {
+            const errorMessage = e instanceof Error ? e.message : String(e);
+            console.error(`Topic extraction failed for item ${index}:`, errorMessage, e);
+            const userFriendlyMessage = errorMessage.includes("429 Too Many Requests") || errorMessage.includes("Quota")
+              ? `Topic extraction for an item failed due to API rate limits. Some topics might be missing.`
+              : `Topic extraction for an item failed: ${errorMessage.substring(0,100)}. Check console.`;
+            toast({
+              title: "Topic Extraction Limited",
+              description: userFriendlyMessage,
+              variant: "destructive"
+            });
+          }
 
           processedCount++;
           setAnalysisProgress(Math.round((processedCount / totalItems) * 50)); // Individual analyses make up 50%
@@ -143,7 +165,7 @@ export default function HomePage() {
         } catch (e: any) {
            const errorMessage = e instanceof Error ? e.message : String(e);
            console.error("Surface urgent issues failed:", errorMessage, e);
-           const userFriendlyMessage = errorMessage.includes("429 Too Many Requests")
+           const userFriendlyMessage = errorMessage.includes("429 Too Many Requests") || errorMessage.includes("Quota")
             ? "Could not generate key insights due to API rate limits. Some insights might be unavailable."
             : `Could not generate key insights: ${errorMessage.substring(0,100)}. Check console for details.`;
           toast({ 
@@ -155,8 +177,6 @@ export default function HomePage() {
       }
       setAnalysisProgress(70);
 
-      // SentimentOverTime is now calculated in SentimentChart, but we keep a basic version for initial load if needed
-      // This is not strictly necessary anymore if SentimentChart always computes from feedbackItems
       const sentimentCountsByDate: Record<string, { positive: number; negative: number; neutral: number }> = {};
       analyzedItems.forEach(item => {
         if (item.timestamp && item.sentiment) {
@@ -178,7 +198,6 @@ export default function HomePage() {
       
       setAnalysisProgress(85);
 
-      // Prepare TopicDistribution data with sentiment breakdown
       const topicSentimentCounts: Record<string, { positive: number; negative: number; neutral: number; total: number; }> = {};
       analyzedItems.forEach(item => {
         item.topics?.forEach(topic => {
@@ -197,7 +216,7 @@ export default function HomePage() {
 
       setProcessedData({
         feedbackItems: analyzedItems,
-        sentimentOverTime: initialSentimentOverTimeData, // Or pass analyzedItems directly
+        sentimentOverTime: initialSentimentOverTimeData, 
         topicDistribution: topicDistributionData,
         keyInsights: keyInsightsData,
       });
@@ -208,9 +227,10 @@ export default function HomePage() {
 
     } catch (error: any) {
       console.error("Analysis failed:", error);
-      setAnalysisError(`Analysis failed: ${error.message}`);
-      toast({ title: "Analysis Error", description: `Analysis failed: ${error.message}`, variant: "destructive" });
-      setCurrentStage('map_columns');
+      const generalErrorMessage = error instanceof Error ? error.message : String(error);
+      setAnalysisError(`Analysis failed: ${generalErrorMessage}`);
+      toast({ title: "Analysis Error", description: `Analysis process encountered an error: ${generalErrorMessage.substring(0,150)}`, variant: "destructive" });
+      setCurrentStage('map_columns'); // Or 'upload' if more appropriate reset
       setAnalysisProgress(0);
     }
   }, [csvRows, toast]);
@@ -252,7 +272,6 @@ export default function HomePage() {
             />
           );
         }
-        // Fallback or error if processedData is null - should ideally not be reached if logic is correct
         return (
             <div className="flex flex-col items-center justify-center min-h-[400px] text-center">
                 <AlertCircle className="h-16 w-16 text-destructive mb-6" />
