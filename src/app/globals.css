@@ -2,10 +2,6 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  font-family: Arial, Helvetica, sans-serif;
-}
-
 @layer base {
   :root {
     --background: 203 17% 93%; /* Light Gray #ECEFF1 */
@@ -38,16 +34,16 @@ body {
     /* Sidebar specific colors, can be adjusted or removed if sidebar isn't prominent */
     --sidebar-background: 231 30% 25%; /* Darker blue for sidebar */
     --sidebar-foreground: 0 0% 95%;
-    --sidebar-primary: 0 0% 98%; 
+    --sidebar-primary: 0 0% 98%;
     --sidebar-primary-foreground: 231 30% 25%;
-    --sidebar-accent: 260 45% 57%; 
+    --sidebar-accent: 260 45% 57%;
     --sidebar-accent-foreground: 0 0% 98%;
     --sidebar-border: 231 30% 35%;
     --sidebar-ring: 260 45% 57%;
   }
 
   .dark {
-    /* Keeping dark theme as a fallback, but primary app is light themed */
+    /* Dark theme variables */
     --background: 240 10% 3.9%;
     --foreground: 0 0% 98%;
     --card: 240 10% 3.9%;
@@ -71,12 +67,12 @@ body {
     --chart-1: 231 48% 58%;
     --chart-2: 260 45% 67%;
     --chart-3: 197 37% 54%;
-    
+
     --sidebar-background: 240 5.9% 10%;
     --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 0 0% 98%; 
+    --sidebar-primary: 0 0% 98%;
     --sidebar-primary-foreground: 240 5.9% 10%;
-    --sidebar-accent: 260 45% 67%; 
+    --sidebar-accent: 260 45% 67%;
     --sidebar-accent-foreground: 0 0% 98%;
     --sidebar-border: 240 3.7% 15.9%;
     --sidebar-ring: 260 45% 67%;
