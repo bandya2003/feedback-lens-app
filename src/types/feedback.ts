@@ -1,3 +1,4 @@
+
 export type FeedbackSentimentLabel = 'positive' | 'negative' | 'neutral';
 
 export interface RawFeedbackItem {
@@ -23,20 +24,31 @@ export interface SentimentDataPoint {
   neutral: number;
 }
 
+/**
+ * @deprecated Replaced by TopicSentimentDistribution for richer topic analysis
+ */
 export interface TopicCount {
   name: string;
   value: number; // Volume of comments
 }
 
+export interface TopicSentimentDistribution {
+  name: string;
+  positive: number;
+  negative: number;
+  neutral: number;
+  total: number;
+}
+
 export interface KeyInsights {
   urgentIssue: string;
-  overallSentiment: string;
+  overallSentiment: string; // This text from AI might be less used if donut chart fully replaces it
 }
 
 export interface ProcessedFeedbackData {
   feedbackItems: FeedbackItem[];
-  sentimentOverTime: SentimentDataPoint[];
-  topicDistribution: TopicCount[];
+  sentimentOverTime: SentimentDataPoint[]; // This will be calculated within SentimentChart based on filtered items
+  topicDistribution: TopicSentimentDistribution[];
   keyInsights: KeyInsights | null;
 }
 

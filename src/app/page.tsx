@@ -20,7 +20,7 @@ import type {
   ColumnMapping,
   FeedbackSentimentLabel,
   SentimentDataPoint,
-  TopicCount
+  TopicSentimentDistribution
 } from '@/types/feedback';
 
 // Basic CSV parser (Consider using a library for robustness)
@@ -28,13 +28,9 @@ function parseCSV(text: string): { headers: string[]; rows: RawFeedbackItem[] } 
   const lines = text.trim().split('\n');
   if (lines.length === 0) return { headers: [], rows: [] };
 
-  // Improved header parsing to handle potential quotes and extra spaces
   const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
   
   const rows = lines.slice(1).map(line => {
-    // This is still a naive CSV parser. It doesn't handle commas inside quoted fields well.
-    // E.g. "field1","field2, with comma","field3"
-    // For production, a robust CSV library (like PapaParse) is highly recommended.
     const values = line.split(',').map(v => v.trim().replace(/^"|"$/g, ''));
     const row: RawFeedbackItem = {};
     headers.forEach((header, index) => {
@@ -63,8 +59,10 @@ export default function HomePage() {
   const handleFileSelect = useCallback(async (selectedFile: File) => {
     setFile(selectedFile);
     setAnalysisError(null);
-    setCurrentStage('analyzing'); // Show loader immediately
-    setAnalysisProgress(5); // Initial progress
+    setProcessedData(null);
+    setActiveTopicFilter(null);
+    setCurrentStage('analyzing'); 
+    setAnalysisProgress(5); 
     try {
       const text = await selectedFile.text();
       setAnalysisProgress(10);
@@ -116,9 +114,8 @@ export default function HomePage() {
              topicsResult = await extractFeedbackTopics({ feedbackText });
           } catch (e) { console.error("Topic extraction failed for item:", index, e); }
 
-
           processedCount++;
-          setAnalysisProgress(Math.round((processedCount / (totalItems * 2)) * 100)); // AI calls are roughly half the work
+          setAnalysisProgress(Math.round((processedCount / totalItems) * 50)); // Individual analyses make up 50%
 
           return {
             id: `fb-${index}-${Date.now()}`,
@@ -133,9 +130,8 @@ export default function HomePage() {
         })
       );
       
-      setAnalysisProgress(50); // After individual analyses
+      setAnalysisProgress(50);
 
-      // Prepare data for KeyInsights (surfaceUrgentIssues)
       const insightsPayload = analyzedItems
         .filter(item => item.sentiment && item.feedbackText)
         .map(item => ({ text: item.feedbackText, sentiment: item.sentiment! }));
@@ -144,57 +140,64 @@ export default function HomePage() {
       if (insightsPayload.length > 0) {
         try {
           keyInsightsData = await surfaceUrgentIssues({ feedbackData: JSON.stringify(insightsPayload) });
-        } catch (e) {
-          const errorMessage = e instanceof Error ? e.message : String(e);
-          console.error("Surface urgent issues failed:", errorMessage, e);
+        } catch (e: any) {
+           const errorMessage = e instanceof Error ? e.message : String(e);
+           console.error("Surface urgent issues failed:", errorMessage, e);
+           const userFriendlyMessage = errorMessage.includes("429 Too Many Requests")
+            ? "Could not generate key insights due to API rate limits. Some insights might be unavailable."
+            : `Could not generate key insights: ${errorMessage.substring(0,100)}. Check console for details.`;
           toast({ 
-            title: "Key Insight Generation Failed", 
-            description: `Could not generate key insights: ${errorMessage}. This may be due to API rate limits. Further details might be in the browser console.`, 
+            title: "Key Insight Generation Limited", 
+            description: userFriendlyMessage, 
             variant: "destructive" 
           });
         }
       }
       setAnalysisProgress(70);
 
-      // Prepare SentimentOverTime data
+      // SentimentOverTime is now calculated in SentimentChart, but we keep a basic version for initial load if needed
+      // This is not strictly necessary anymore if SentimentChart always computes from feedbackItems
       const sentimentCountsByDate: Record<string, { positive: number; negative: number; neutral: number }> = {};
-      let hasTimestamps = false;
       analyzedItems.forEach(item => {
         if (item.timestamp && item.sentiment) {
-          hasTimestamps = true;
-          const dateStr = item.timestamp.toISOString().split('T')[0]; // YYYY-MM-DD
+          const dateStr = item.timestamp.toISOString().split('T')[0];
           if (!sentimentCountsByDate[dateStr]) {
             sentimentCountsByDate[dateStr] = { positive: 0, negative: 0, neutral: 0 };
           }
           sentimentCountsByDate[dateStr][item.sentiment]++;
-        } else if (item.sentiment) { // Fallback if no timestamps
+        } else if (item.sentiment) {
            if (!sentimentCountsByDate['Overall']) {
             sentimentCountsByDate['Overall'] = { positive: 0, negative: 0, neutral: 0 };
           }
           sentimentCountsByDate['Overall'][item.sentiment]++;
         }
       });
-      
-      const sentimentOverTimeData: SentimentDataPoint[] = Object.entries(sentimentCountsByDate)
+      const initialSentimentOverTimeData: SentimentDataPoint[] = Object.entries(sentimentCountsByDate)
         .map(([date, counts]) => ({ date, ...counts }))
-        .sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime()); // Sort by date
+        .sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
       
       setAnalysisProgress(85);
 
-      // Prepare TopicDistribution data
-      const topicCounts: Record<string, number> = {};
+      // Prepare TopicDistribution data with sentiment breakdown
+      const topicSentimentCounts: Record<string, { positive: number; negative: number; neutral: number; total: number; }> = {};
       analyzedItems.forEach(item => {
         item.topics?.forEach(topic => {
-          topicCounts[topic] = (topicCounts[topic] || 0) + 1;
+          if (!topicSentimentCounts[topic]) {
+            topicSentimentCounts[topic] = { positive: 0, negative: 0, neutral: 0, total: 0 };
+          }
+          if (item.sentiment) {
+            topicSentimentCounts[topic][item.sentiment]++;
+          }
+          topicSentimentCounts[topic].total++;
         });
       });
-      const topicDistributionData: TopicCount[] = Object.entries(topicCounts)
-        .map(([name, value]) => ({ name, value }))
-        .sort((a, b) => b.value - a.value);
+      const topicDistributionData: TopicSentimentDistribution[] = Object.entries(topicSentimentCounts)
+        .map(([name, counts]) => ({ name, ...counts }))
+        .sort((a, b) => b.total - a.total);
 
       setProcessedData({
         feedbackItems: analyzedItems,
-        sentimentOverTime: sentimentOverTimeData,
+        sentimentOverTime: initialSentimentOverTimeData, // Or pass analyzedItems directly
         topicDistribution: topicDistributionData,
         keyInsights: keyInsightsData,
       });
@@ -207,7 +210,7 @@ export default function HomePage() {
       console.error("Analysis failed:", error);
       setAnalysisError(`Analysis failed: ${error.message}`);
       toast({ title: "Analysis Error", description: `Analysis failed: ${error.message}`, variant: "destructive" });
-      setCurrentStage('map_columns'); // Or 'upload' if more appropriate
+      setCurrentStage('map_columns');
       setAnalysisProgress(0);
     }
   }, [csvRows, toast]);
@@ -249,7 +252,15 @@ export default function HomePage() {
             />
           );
         }
-        return <p>Error: No processed data available.</p>; // Should not happen if logic is correct
+        // Fallback or error if processedData is null - should ideally not be reached if logic is correct
+        return (
+            <div className="flex flex-col items-center justify-center min-h-[400px] text-center">
+                <AlertCircle className="h-16 w-16 text-destructive mb-6" />
+                <h2 className="text-2xl font-headline mb-2 text-destructive">Error Displaying Dashboard</h2>
+                <p className="text-muted-foreground mb-4">No processed data available. Please try analyzing the file again.</p>
+                <Button onClick={handleReset}>Start Over</Button>
+            </div>
+        );
       default:
         return <p>Unknown application state.</p>;
     }
@@ -276,7 +287,7 @@ export default function HomePage() {
           </Alert>
         )}
         {renderContent()}
-        {(currentStage === 'dashboard' || currentStage === 'map_columns' && csvRows.length > 0) && (
+        {(currentStage === 'dashboard' || (currentStage === 'map_columns' && csvRows.length > 0)) && (
           <div className="mt-8 text-center">
             <Button variant="outline" onClick={handleReset}>
               Analyze Another File

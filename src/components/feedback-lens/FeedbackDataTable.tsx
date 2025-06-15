@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   Table,
@@ -9,7 +10,6 @@ import {
 } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ArrowUpDown, ChevronLeft, ChevronRight, ListChecks } from 'lucide-react';
 import type { FeedbackItem, FeedbackSentimentLabel } from '@/types/feedback';
@@ -22,20 +22,14 @@ interface FeedbackDataTableProps {
 
 const ITEMS_PER_PAGE = 10;
 
-const sentimentVariant = (sentiment?: FeedbackSentimentLabel): "default" | "destructive" | "secondary" => {
-  if (sentiment === 'positive') return 'default'; // primary-like
-  if (sentiment === 'negative') return 'destructive';
-  return 'secondary'; // neutral
-}
-
 const SentimentBadge: React.FC<{ sentiment?: FeedbackSentimentLabel }> = ({ sentiment }) => {
-  if (!sentiment) return null;
+  if (!sentiment) return <Badge variant="outline">N/A</Badge>;
   let variant: "default" | "secondary" | "destructive" | "outline" = "outline";
   let textClass = "";
 
   switch (sentiment) {
     case 'positive':
-      variant = 'default'; // Uses primary color
+      variant = 'default'; // Uses primary color (blueish)
       textClass = 'text-primary-foreground';
       break;
     case 'negative':
@@ -47,27 +41,25 @@ const SentimentBadge: React.FC<{ sentiment?: FeedbackSentimentLabel }> = ({ sent
       textClass = 'text-secondary-foreground';
       break;
   }
-  return <Badge variant={variant} className={textClass}>{sentiment.charAt(0).toUpperCase() + sentiment.slice(1)}</Badge>;
+  return <Badge variant={variant} className={cn("capitalize", textClass)}>{sentiment}</Badge>;
 };
 
 
 export function FeedbackDataTable({ data, activeTopicFilter }: FeedbackDataTableProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [sortConfig, setSortConfig] = useState<{ key: keyof FeedbackItem | null; direction: 'ascending' | 'descending' }>({
+  const [sortConfig, setSortConfig] = useState<{ key: keyof FeedbackItem | 'topicsDisplay' | null; direction: 'ascending' | 'descending' }>({
     key: null,
     direction: 'ascending',
   });
 
   useEffect(() => {
-    setCurrentPage(1); // Reset to first page on data or filter change
-  }, [data, activeTopicFilter, searchTerm]);
+    setCurrentPage(1); 
+  }, [data, activeTopicFilter, searchTerm, sortConfig]); // Reset page on sort too
 
   const filteredData = useMemo(() => {
     let items = data;
-    if (activeTopicFilter) {
-      items = items.filter(item => item.topics && item.topics.includes(activeTopicFilter));
-    }
+    // activeTopicFilter is already applied in Dashboard.tsx, so `data` prop is already filtered by topic if needed
     if (searchTerm) {
       items = items.filter(item =>
         item.feedbackText.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -75,15 +67,16 @@ export function FeedbackDataTable({ data, activeTopicFilter }: FeedbackDataTable
         (item.sentiment && item.sentiment.toLowerCase().includes(searchTerm.toLowerCase()))
       );
     }
-    return items;
-  }, [data, activeTopicFilter, searchTerm]);
+    return items.map(item => ({...item, topicsDisplay: item.topics?.join(', ') || ''}));
+  }, [data, searchTerm]);
 
   const sortedData = useMemo(() => {
     let sortableItems = [...filteredData];
     if (sortConfig.key) {
       sortableItems.sort((a, b) => {
-        const valA = a[sortConfig.key!];
-        const valB = b[sortConfig.key!];
+        // Type assertion for key access
+        const valA = a[sortConfig.key as keyof typeof a];
+        const valB = b[sortConfig.key as keyof typeof b];
 
         let comparison = 0;
         if (valA === undefined || valA === null) comparison = -1;
@@ -109,7 +102,7 @@ export function FeedbackDataTable({ data, activeTopicFilter }: FeedbackDataTable
 
   const totalPages = Math.ceil(sortedData.length / ITEMS_PER_PAGE);
 
-  const requestSort = (key: keyof FeedbackItem) => {
+  const requestSort = (key: keyof FeedbackItem | 'topicsDisplay') => {
     let direction: 'ascending' | 'descending' = 'ascending';
     if (sortConfig.key === key && sortConfig.direction === 'ascending') {
       direction = 'descending';
@@ -117,7 +110,7 @@ export function FeedbackDataTable({ data, activeTopicFilter }: FeedbackDataTable
     setSortConfig({ key, direction });
   };
 
-  const SortableHeader: React.FC<{ columnKey: keyof FeedbackItem; children: React.ReactNode }> = ({ columnKey, children }) => (
+  const SortableHeader: React.FC<{ columnKey: keyof FeedbackItem | 'topicsDisplay'; children: React.ReactNode }> = ({ columnKey, children }) => (
     <TableHead onClick={() => requestSort(columnKey)} className="cursor-pointer hover:bg-muted/50">
       <div className="flex items-center">
         {children}
@@ -128,7 +121,7 @@ export function FeedbackDataTable({ data, activeTopicFilter }: FeedbackDataTable
     </TableHead>
   );
 
-  if (!data || data.length === 0) {
+  if (!data || data.length === 0 && !activeTopicFilter && !searchTerm) { // Show initial empty state only if truly no data
      return (
       <Card className="shadow-lg mt-6">
         <CardHeader>
@@ -156,17 +149,17 @@ export function FeedbackDataTable({ data, activeTopicFilter }: FeedbackDataTable
         <CardDescription>
           Detailed view of individual feedback comments.
           {activeTopicFilter && (
-            <span className="ml-2 font-semibold text-primary">Filtered by topic: {activeTopicFilter}</span>
+            <span className="ml-1 text-sm text-primary">(Filtered by topic: <Badge variant="secondary">{activeTopicFilter}</Badge>)</span>
           )}
         </CardDescription>
       </CardHeader>
       <CardContent>
         <div className="mb-4">
           <Input
-            placeholder="Search feedback..."
+            placeholder="Search feedback comments, sentiments, or topics..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="max-w-sm"
+            className="max-w-md"
             aria-label="Search feedback table"
           />
         </div>
@@ -176,25 +169,31 @@ export function FeedbackDataTable({ data, activeTopicFilter }: FeedbackDataTable
               <TableRow>
                 <SortableHeader columnKey="feedbackText">Comment</SortableHeader>
                 <SortableHeader columnKey="sentiment">Sentiment</SortableHeader>
-                <SortableHeader columnKey="topics">Topic(s)</SortableHeader>
-                {/* Add timestamp if available and desired */}
-                 {/* <SortableHeader columnKey="timestamp">Timestamp</SortableHeader> */}
+                <SortableHeader columnKey="topicsDisplay">Topic(s)</SortableHeader>
+                 {data.some(item => item.timestamp) && <SortableHeader columnKey="timestamp">Timestamp</SortableHeader>}
               </TableRow>
             </TableHeader>
             <TableBody>
               {paginatedData.length > 0 ? (
                 paginatedData.map((item) => (
                   <TableRow key={item.id}>
-                    <TableCell className="max-w-md truncate" title={item.feedbackText}>{item.feedbackText}</TableCell>
+                    <TableCell className="max-w-sm truncate text-sm" title={item.feedbackText}>{item.feedbackText}</TableCell>
                     <TableCell><SentimentBadge sentiment={item.sentiment} /></TableCell>
-                    <TableCell>{item.topics?.join(', ')}</TableCell>
-                    {/* <TableCell>{item.timestamp ? item.timestamp.toLocaleDateString() : 'N/A'}</TableCell> */}
+                    <TableCell>
+                      <div className="flex flex-wrap gap-1">
+                        {item.topics?.map(topic => (
+                          <Badge key={topic} variant="outline" className="text-xs">{topic}</Badge>
+                        ))}
+                        {!item.topics || item.topics.length === 0 && <span className="text-xs text-muted-foreground">N/A</span>}
+                      </div>
+                    </TableCell>
+                    {data.some(d => d.timestamp) && <TableCell className="text-xs text-muted-foreground">{item.timestamp ? item.timestamp.toLocaleDateString() : 'N/A'}</TableCell>}
                   </TableRow>
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={3} className="h-24 text-center text-muted-foreground">
-                    No results found.
+                  <TableCell colSpan={data.some(d => d.timestamp) ? 4 : 3} className="h-24 text-center text-muted-foreground">
+                    No results found for your current filters or search term.
                   </TableCell>
                 </TableRow>
               )}
@@ -204,7 +203,7 @@ export function FeedbackDataTable({ data, activeTopicFilter }: FeedbackDataTable
         {totalPages > 1 && (
           <div className="flex items-center justify-end space-x-2 py-4">
             <span className="text-sm text-muted-foreground">
-              Page {currentPage} of {totalPages}
+              Page {currentPage} of {totalPages} ({sortedData.length} items)
             </span>
             <Button
               variant="outline"
