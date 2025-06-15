@@ -1,0 +1,11 @@
+id,feedback,timestamp,user_id,product_area
+1,"I love the new interface, it's so much easier to use!",2024-01-15T10:00:00Z,user123,UI
+2,"The pricing is a bit too high for a small business like mine.",2024-01-16T11:30:00Z,user456,Pricing
+3,"Customer support was very helpful and resolved my issue quickly.",2024-01-17T14:20:00Z,user789,Support
+4,"The app crashes frequently on my Android device.",2024-01-18T09:05:00Z,user101,Performance
+5,"Neutral comment about the documentation.",2024-01-19T16:45:00Z,user112,Docs
+6,"The onboarding process was confusing.",2024-01-20T12:00:00Z,user223,Onboarding
+7,"I wish there was an integration with Slack.",2024-01-21T18:15:00Z,user334,Integrations
+8,"Amazing features, game changer for our workflow!",2024-01-22T08:50:00Z,user445,Features
+9,"The dark mode is not very readable.",2024-01-23T11:25:00Z,user556,UI
+10,"It took a while to understand how to map columns.",2024-01-24T15:00:00Z,user667,UX
