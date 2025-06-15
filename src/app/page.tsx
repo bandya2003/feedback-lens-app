@@ -365,14 +365,19 @@ export default function HomePage() {
 
   return (
     <div className="container mx-auto py-8 px-4 flex flex-col items-center min-h-screen">
-      <header className="mb-8 text-center">
-        <h1 className="text-5xl font-bold font-headline text-primary flex items-center justify-center">
-          <Sparkles className="w-12 h-12 mr-3 text-accent" />
-          Feedback Lens
-        </h1>
-        <p className="text-lg text-muted-foreground mt-2">
-          AI-powered insights from your customer feedback.
-        </p>
+      <header className="w-full flex justify-between items-center mb-8 text-center">
+        <div className="flex-1 text-center"> {/* Centering the title */}
+          <h1 className="text-5xl font-bold font-headline text-primary flex items-center justify-center">
+            <Sparkles className="w-12 h-12 mr-3 text-accent" />
+            Feedback Lens
+          </h1>
+          <p className="text-lg text-muted-foreground mt-2">
+            AI-powered insights from your customer feedback.
+          </p>
+        </div>
+        <div className="ml-auto"> {/* Pushes the button to the right */}
+          <ThemeToggleButton />
+        </div>
       </header>
       
       <main className="w-full max-w-7xl">
@@ -397,7 +402,6 @@ export default function HomePage() {
           <p className="text-sm text-muted-foreground">
             &copy; {new Date().getFullYear()} Feedback Lens. Powered by AI.
           </p>
-          <ThemeToggleButton />
         </div>
       </footer>
     </div>
