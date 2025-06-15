@@ -14,6 +14,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { ArrowUpDown, ChevronLeft, ChevronRight, ListChecks } from 'lucide-react';
 import type { FeedbackItem, FeedbackSentimentLabel } from '@/types/feedback';
 import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils'; // Added import for cn
 
 interface FeedbackDataTableProps {
   data: FeedbackItem[];
