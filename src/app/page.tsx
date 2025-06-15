@@ -113,8 +113,8 @@ export default function HomePage() {
             const errorMessage = e instanceof Error ? e.message : String(e);
             console.error(`Sentiment analysis failed for item ${index}:`, errorMessage, e);
             const userFriendlyMessage = errorMessage.includes("429 Too Many Requests") || errorMessage.includes("Quota")
-              ? `Sentiment analysis for an item failed due to API rate limits. Some sentiments might be missing.`
-              : `Sentiment analysis for an item failed: ${errorMessage.substring(0,100)}. Check console.`;
+              ? `Sentiment analysis for item ${index+1} failed due to API rate limits. Its sentiment might be missing.`
+              : `Sentiment analysis for item ${index+1} failed: ${errorMessage.substring(0,100)}. Check console.`;
             toast({
               title: "Sentiment Analysis Limited",
               description: userFriendlyMessage,
@@ -127,8 +127,8 @@ export default function HomePage() {
             const errorMessage = e instanceof Error ? e.message : String(e);
             console.error(`Topic extraction failed for item ${index}:`, errorMessage, e);
             const userFriendlyMessage = errorMessage.includes("429 Too Many Requests") || errorMessage.includes("Quota")
-              ? `Topic extraction for an item failed due to API rate limits. Some topics might be missing.`
-              : `Topic extraction for an item failed: ${errorMessage.substring(0,100)}. Check console.`;
+              ? `Topic extraction for item ${index+1} failed due to API rate limits. Its topics might be missing.`
+              : `Topic extraction for item ${index+1} failed: ${errorMessage.substring(0,100)}. Check console.`;
             toast({
               title: "Topic Extraction Limited",
               description: userFriendlyMessage,
@@ -164,8 +164,15 @@ export default function HomePage() {
           keyInsightsData = await surfaceUrgentIssues({ feedbackData: JSON.stringify(insightsPayload) });
         } catch (e: any) {
            const errorMessage = e instanceof Error ? e.message : String(e);
-           console.error("Surface urgent issues failed:", errorMessage, e);
-           const userFriendlyMessage = errorMessage.includes("429 Too Many Requests") || errorMessage.includes("Quota")
+           const isRateLimitError = errorMessage.includes("429 Too Many Requests") || errorMessage.includes("Quota");
+
+           if (isRateLimitError) {
+             console.warn("Key insight generation limited by API rate limits:", errorMessage);
+           } else {
+             console.error("Surface urgent issues failed:", errorMessage, e);
+           }
+
+           const userFriendlyMessage = isRateLimitError
             ? "Could not generate key insights due to API rate limits. Some insights might be unavailable."
             : `Could not generate key insights: ${errorMessage.substring(0,100)}. Check console for details.`;
           toast({ 
@@ -186,15 +193,30 @@ export default function HomePage() {
           }
           sentimentCountsByDate[dateStr][item.sentiment]++;
         } else if (item.sentiment) {
-           if (!sentimentCountsByDate['Overall']) {
-            sentimentCountsByDate['Overall'] = { positive: 0, negative: 0, neutral: 0 };
+           const overallDateKey = 'Overall'; // Use a consistent key for non-timestamped data
+           if (!sentimentCountsByDate[overallDateKey]) {
+            sentimentCountsByDate[overallDateKey] = { positive: 0, negative: 0, neutral: 0 };
           }
-          sentimentCountsByDate['Overall'][item.sentiment]++;
+          sentimentCountsByDate[overallDateKey][item.sentiment]++;
         }
       });
-      const initialSentimentOverTimeData: SentimentDataPoint[] = Object.entries(sentimentCountsByDate)
-        .map(([date, counts]) => ({ date, ...counts }))
-        .sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      
+      let initialSentimentOverTimeData: SentimentDataPoint[];
+      // Check if there's only one key and it's 'Overall', or if no date-specific keys exist
+      const dateKeys = Object.keys(sentimentCountsByDate);
+      const hasOnlyOverall = dateKeys.length === 1 && dateKeys[0] === 'Overall';
+      const hasDateSpecificData = dateKeys.some(key => key !== 'Overall');
+
+      if (hasOnlyOverall || !hasDateSpecificData) {
+        // If only 'Overall' data or no specific dates, create a single point for the chart
+         initialSentimentOverTimeData = dateKeys.map(date => ({ date, ...sentimentCountsByDate[date] }));
+      } else {
+        // Otherwise, filter out 'Overall' if date-specific data exists, then sort by date
+        initialSentimentOverTimeData = Object.entries(sentimentCountsByDate)
+          .filter(([date]) => date !== 'Overall')
+          .map(([date, counts]) => ({ date, ...counts }))
+          .sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      }
       
       setAnalysisProgress(85);
 
@@ -251,7 +273,7 @@ export default function HomePage() {
       case 'upload':
         return <FileUpload onFileSelect={handleFileSelect} />;
       case 'map_columns':
-        return <ColumnSelector headers={csvHeaders} onAnalyze={handleAnalyze} isAnalyzing={false} />;
+        return <ColumnSelector headers={csvHeaders} onAnalyze={handleAnalyze} isAnalyzing={currentStage === 'analyzing'} />;
       case 'analyzing':
         return (
           <div className="flex flex-col items-center justify-center min-h-[400px] text-center">
@@ -322,3 +344,4 @@ export default function HomePage() {
     </div>
   );
 }
+
