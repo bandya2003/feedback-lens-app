@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useCallback, useEffect } from 'react';
@@ -144,8 +145,13 @@ export default function HomePage() {
         try {
           keyInsightsData = await surfaceUrgentIssues({ feedbackData: JSON.stringify(insightsPayload) });
         } catch (e) {
-          console.error("Surface urgent issues failed:", e);
-          toast({ title: "Insight Generation Error", description: "Could not generate key insights.", variant: "destructive" });
+          const errorMessage = e instanceof Error ? e.message : String(e);
+          console.error("Surface urgent issues failed:", errorMessage, e);
+          toast({ 
+            title: "Key Insight Generation Failed", 
+            description: `Could not generate key insights: ${errorMessage}. This may be due to API rate limits. Further details might be in the browser console.`, 
+            variant: "destructive" 
+          });
         }
       }
       setAnalysisProgress(70);
