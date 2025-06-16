@@ -16,7 +16,7 @@ export function ThemeToggleButton() {
 
   if (!mounted) {
     // Render a placeholder or null to avoid hydration mismatch
-    return <Button variant="ghost" size="icon" disabled className="w-9 h-9 opacity-0" />; 
+    return <Button variant="ghost" size="icon" disabled className="h-12 w-12 opacity-0" />; 
   }
 
   const toggleTheme = () => {
@@ -24,11 +24,11 @@ export function ThemeToggleButton() {
   };
 
   return (
-    <Button variant="ghost" size="icon" onClick={toggleTheme} aria-label="Toggle theme">
+    <Button variant="ghost" size="icon" onClick={toggleTheme} aria-label="Toggle theme" className="h-12 w-12">
       {resolvedTheme === "dark" ? (
-        <Sun className="h-[1.2rem] w-[1.2rem]" />
+        <Sun className="h-[1.5rem] w-[1.5rem]" />
       ) : (
-        <Moon className="h-[1.2rem] w-[1.2rem]" />
+        <Moon className="h-[1.5rem] w-[1.5rem]" />
       )}
     </Button>
   );
