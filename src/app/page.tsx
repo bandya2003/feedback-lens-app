@@ -15,7 +15,7 @@ import { Loader2, AlertCircle, Sparkles, FileUp, Brain, BarChart3, Save } from '
 import { useToast } from '@/hooks/use-toast';
 import { analyzeFeedbackBatch, AnalyzeFeedbackBatchInput, AnalyzeFeedbackBatchOutput } from '@/ai/flows/analyze-feedback-batch';
 import { surfaceUrgentIssues } from '@/ai/flows/surface-urgent-issues';
-import { saveAnalysis, SaveAnalysisInput } from '@/ai/flows/save-analysis-flow';
+import { saveAnalysis, SaveAnalysisInput, ProcessedFeedbackDataForSave } from '@/ai/flows/save-analysis-flow'; // Import ProcessedFeedbackDataForSave
 import type {
   RawFeedbackItem,
   FeedbackItem,
@@ -117,7 +117,6 @@ export default function HomePage() {
     setAnalysisProgress(0);
     setAnalysisError(null);
     setActiveTopicFilter(null);
-    // Suggest a default analysis name based on the file
     setCurrentAnalysisName(file.name.replace(/\.csv$/i, '') + ' Analysis');
 
 
@@ -322,11 +321,20 @@ export default function HomePage() {
     }
     setIsSaving(true);
     try {
+      // Create a version of processedData suitable for saving, converting Date to ISO string
+      const processedDataForSave: ProcessedFeedbackDataForSave = {
+        ...processedData,
+        feedbackItems: processedData.feedbackItems.map(item => ({
+          ...item,
+          timestamp: item.timestamp instanceof Date ? item.timestamp.toISOString() : undefined,
+        })),
+      };
+
       const input: SaveAnalysisInput = {
         userId: "demo_user_01", // Placeholder
         analysisName: currentAnalysisName.trim(),
         sourceFileName: file.name,
-        processedData: processedData,
+        processedData: processedDataForSave,
       };
       const result = await saveAnalysis(input);
       toast({
@@ -426,7 +434,7 @@ export default function HomePage() {
 
   return (
     <div className="container mx-auto py-8 px-4 flex flex-col items-center min-h-screen">
-      <header className="w-full flex justify-between items-start mb-8 text-center">
+      <header className="w-full flex justify-between items-start mb-8">
         <div className="flex-1 text-center pt-1">
           <h1 className="text-5xl font-bold font-headline text-primary flex items-center justify-center">
             <Sparkles className="w-12 h-12 mr-3 text-accent" />
@@ -436,7 +444,7 @@ export default function HomePage() {
             AI-powered insights from your customer feedback.
           </p>
         </div>
-        <div className="ml-auto"> 
+        <div className="ml-auto flex-shrink-0"> 
           <ThemeToggleButton />
         </div>
       </header>
