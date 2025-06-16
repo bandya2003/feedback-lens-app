@@ -1,10 +1,4 @@
 
-'use server'; // This directive might be contextually incorrect here if it's just schemas.
-// However, given the original error, let's keep it consistent with what might have been intended
-// for Genkit's file structure, or remove if it causes further issues for a pure schema file.
-// For now, let's assume it should *not* be here if it's purely schemas.
-// Decision: Removing 'use server' as this file is for schema definitions.
-
 import {z} from 'genkit';
 
 // Schemas for data to be saved/retrieved
