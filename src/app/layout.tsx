@@ -3,6 +3,7 @@ import type {Metadata} from 'next';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 import { ThemeProvider } from 'next-themes';
+import { Header } from '@/components/layout/Header'; // Import the new Header
 
 export const metadata: Metadata = {
   title: 'Feedback Lens',
@@ -23,7 +24,10 @@ export default function RootLayout({
       </head>
       <body className="font-body antialiased min-h-screen flex flex-col" suppressHydrationWarning={true}>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
-          {children}
+          <Header /> {/* Add the Header component here */}
+          <main className="flex-grow"> {/* Add a main wrapper for content */}
+            {children}
+          </main>
           <Toaster />
         </ThemeProvider>
       </body>

@@ -11,11 +11,11 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, AlertCircle, Sparkles, FileUp, Brain, BarChart3, Save } from 'lucide-react';
+import { Loader2, AlertCircle, FileUp, Brain, BarChart3, Save } from 'lucide-react'; // Removed Sparkles as it's in global Header
 import { useToast } from '@/hooks/use-toast';
 import { analyzeFeedbackBatch, AnalyzeFeedbackBatchInput, AnalyzeFeedbackBatchOutput } from '@/ai/flows/analyze-feedback-batch';
 import { surfaceUrgentIssues } from '@/ai/flows/surface-urgent-issues';
-import { saveAnalysis, SaveAnalysisInput, ProcessedFeedbackDataForSave } from '@/ai/flows/save-analysis-flow'; // Import ProcessedFeedbackDataForSave
+import { saveAnalysis, SaveAnalysisInput, ProcessedFeedbackDataForSave } from '@/ai/flows/save-analysis-flow.ts'; 
 import type {
   RawFeedbackItem,
   FeedbackItem,
@@ -24,7 +24,7 @@ import type {
   SentimentDataPoint,
   TopicSentimentDistribution
 } from '@/types/feedback';
-import { ThemeToggleButton } from '@/components/ThemeToggleButton';
+// Removed ThemeToggleButton import as it's in global Header
 
 // Basic CSV parser
 function parseCSV(text: string): { headers: string[]; rows: RawFeedbackItem[] } {
@@ -321,7 +321,6 @@ export default function HomePage() {
     }
     setIsSaving(true);
     try {
-      // Create a version of processedData suitable for saving, converting Date to ISO string
       const processedDataForSave: ProcessedFeedbackDataForSave = {
         ...processedData,
         feedbackItems: processedData.feedbackItems.map(item => ({
@@ -331,7 +330,7 @@ export default function HomePage() {
       };
 
       const input: SaveAnalysisInput = {
-        userId: "demo_user_01", // Placeholder
+        userId: "demo_user_01", 
         analysisName: currentAnalysisName.trim(),
         sourceFileName: file.name,
         processedData: processedDataForSave,
@@ -434,22 +433,9 @@ export default function HomePage() {
 
   return (
     <div className="container mx-auto py-8 px-4 flex flex-col items-center min-h-screen">
-      <header className="w-full flex justify-between items-start mb-8">
-        <div className="flex-1 text-center pt-1">
-          <h1 className="text-5xl font-bold font-headline text-primary flex items-center justify-center">
-            <Sparkles className="w-12 h-12 mr-3 text-accent" />
-            Feedback Lens
-          </h1>
-          <p className="text-lg text-muted-foreground mt-2">
-            AI-powered insights from your customer feedback.
-          </p>
-        </div>
-        <div className="ml-auto flex-shrink-0"> 
-          <ThemeToggleButton />
-        </div>
-      </header>
+      {/* Local page header removed, global header in layout.tsx will handle title and theme toggle */}
       
-      <main className="w-full max-w-7xl">
+      <div className="w-full max-w-7xl"> {/* Changed from <main> to <div> for more flexibility if needed */}
         {analysisError && (
           <Alert variant="destructive" className="mb-6">
             <AlertCircle className="h-4 w-4" />
@@ -511,7 +497,7 @@ export default function HomePage() {
                 </Dialog>
             )}
         </div>
-      </main>
+      </div>
       <footer className="w-full text-center mt-auto py-6">
         <div className="flex justify-center items-center space-x-4">
           <p className="text-sm text-muted-foreground">
@@ -522,4 +508,3 @@ export default function HomePage() {
     </div>
   );
 }
-
