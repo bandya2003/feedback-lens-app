@@ -5,15 +5,22 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Loader2, AlertCircle, FileText, PlusCircle } from 'lucide-react';
+import { Loader2, AlertCircle, FileText, PlusCircle, Columns } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { listAnalyses, type ListAnalysesOutputItem } from '@/ai/flows/list-analyses-flow'; 
+import { listAnalyses, type ListAnalysesOutputItem } from '@/ai/flows/list-analyses-flow';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
+import { cn } from '@/lib/utils';
 
 export default function HistoryPage() {
   const [reports, setReports] = useState<ListAnalysesOutputItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
+
+  const [isCompareModeActive, setIsCompareModeActive] = useState(false);
+  const [selectedReports, setSelectedReports] = useState<string[]>([]);
 
   useEffect(() => {
     async function fetchHistory() {
@@ -39,6 +46,35 @@ export default function HistoryPage() {
     fetchHistory();
   }, [toast]);
 
+  const handleCompareModeToggle = (checked: boolean) => {
+    setIsCompareModeActive(checked);
+    if (!checked) {
+      setSelectedReports([]); // Clear selections when exiting compare mode
+    }
+  };
+
+  const handleReportSelect = (reportId: string) => {
+    setSelectedReports(prevSelected => {
+      const isCurrentlySelected = prevSelected.includes(reportId);
+      if (isCurrentlySelected) {
+        return prevSelected.filter(id => id !== reportId);
+      } else {
+        if (prevSelected.length < 2) {
+          return [...prevSelected, reportId];
+        }
+        // If already 2 selected and trying to select a new one, show a toast.
+        toast({
+            title: "Selection Limit Reached",
+            description: "You can only select up to two reports to compare.",
+            variant: "default",
+            duration: 3000,
+        });
+        return prevSelected; // Do not add the third report
+      }
+    });
+  };
+
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[calc(100vh-200px)] text-center">
@@ -62,11 +98,33 @@ export default function HistoryPage() {
 
   return (
     <div className="container mx-auto py-8 px-4">
-      <div className="mb-8 text-center">
+      <div className="mb-6 text-center">
         <h1 className="text-4xl font-bold font-headline text-primary">Analysis Report History</h1>
         <p className="text-lg text-muted-foreground mt-2">
           Review your previously saved feedback analyses.
         </p>
+      </div>
+
+      <div className="mb-6 flex flex-col sm:flex-row items-center justify-center sm:justify-between gap-4 p-4 border rounded-lg bg-card shadow">
+        <div className="flex items-center space-x-2">
+          <Switch
+            id="compare-mode-toggle"
+            checked={isCompareModeActive}
+            onCheckedChange={handleCompareModeToggle}
+            aria-label="Toggle compare mode"
+          />
+          <Label htmlFor="compare-mode-toggle" className="font-medium text-foreground">
+            Enable Compare Mode {isCompareModeActive && `(${selectedReports.length}/2 selected)`}
+          </Label>
+        </div>
+        {isCompareModeActive && selectedReports.length === 2 && (
+          <Button asChild size="sm">
+            <Link href={`/compare/${selectedReports[0]}/vs/${selectedReports[1]}`}>
+              <Columns className="mr-2 h-4 w-4" />
+              Compare Selected Reports
+            </Link>
+          </Button>
+        )}
       </div>
 
       {reports.length === 0 ? (
@@ -85,21 +143,54 @@ export default function HistoryPage() {
         </div>
       ) : (
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {reports.map((report) => (
-            <Card key={report.id} className="shadow-lg hover:shadow-xl transition-shadow duration-300">
-              <CardHeader>
-                <CardTitle className="font-headline text-xl truncate" title={report.name}>
-                  {report.name}
-                </CardTitle>
-                <CardDescription>Saved on: {report.date}</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {/* Future: Could add a small summary or stats here */}
-                <p className="text-sm text-muted-foreground">Report ID: {report.id.substring(0,8)}...</p>
-              </CardContent>
-              {/* Future: Add a button to view the full report, e.g., <Button asChild className="w-full mt-2"><Link href={`/dashboard/${report.id}`}>View Report</Link></Button> */}
-            </Card>
-          ))}
+          {reports.map((report) => {
+            const isSelected = selectedReports.includes(report.id);
+            const canSelectMore = selectedReports.length < 2;
+            const isDisabled = isCompareModeActive && !isSelected && !canSelectMore;
+
+            return (
+              <Card 
+                key={report.id} 
+                className={cn(
+                  "shadow-lg hover:shadow-xl transition-all duration-300 relative",
+                  isCompareModeActive && "cursor-pointer",
+                  isSelected && "ring-2 ring-primary border-primary",
+                  isDisabled && "opacity-60 cursor-not-allowed"
+                )}
+                onClick={() => {
+                  if (isCompareModeActive && !isDisabled) {
+                    handleReportSelect(report.id);
+                  }
+                }}
+              >
+                {isCompareModeActive && (
+                  <div className="absolute top-3 right-3 z-10">
+                    <Checkbox
+                      id={`select-report-${report.id}`}
+                      checked={isSelected}
+                      onCheckedChange={() => handleReportSelect(report.id)}
+                      disabled={isDisabled}
+                      aria-label={`Select report ${report.name}`}
+                      className={cn(
+                        "h-5 w-5 bg-background border-2",
+                        isSelected ? "border-primary text-primary" : "border-muted-foreground"
+                      )}
+                    />
+                  </div>
+                )}
+                <CardHeader className={cn(isCompareModeActive && "pr-10")}> {/* Add padding if checkbox is present */}
+                  <CardTitle className="font-headline text-xl truncate" title={report.name}>
+                    {report.name}
+                  </CardTitle>
+                  <CardDescription>Saved on: {report.date}</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground">Report ID: {report.id.substring(0,8)}...</p>
+                </CardContent>
+                {/* Future: Add a button to view the full report, e.g., <Button asChild className="w-full mt-2"><Link href={`/dashboard/${report.id}`}>View Report</Link></Button> */}
+              </Card>
+            );
+          })}
         </div>
       )}
     </div>
