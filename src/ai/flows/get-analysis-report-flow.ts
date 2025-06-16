@@ -3,34 +3,46 @@
 /**
  * @fileOverview A Genkit flow for fetching a single saved analysis report.
  *
- * - getAnalysisReport - Fetches the processed data for a specific analysis ID.
+ * - getAnalysisReport - Fetches the processed data and details for a specific analysis ID.
  * - GetAnalysisReportInput - Schema for the input (analysisId).
- * - GetAnalysisReportOutput - Schema for the output (processedData or null).
+ * - GetAnalysisReportOutput - Schema for the output (processedData, analysisDetails or null).
  */
 
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 import { firestore } from '@/lib/firebaseAdmin';
-// Import the schema and type from the new central location
 import { 
     type ProcessedFeedbackDataForSave, 
     ProcessedFeedbackDataSchema 
-} from '@/ai/schemas/processed-data-schema'; // Updated import
+} from '@/ai/schemas/processed-data-schema';
 
 const GetAnalysisReportInputSchema = z.object({
   analysisId: z.string().describe("The Firestore document ID of the analysis to fetch."),
 });
 export type GetAnalysisReportInput = z.infer<typeof GetAnalysisReportInputSchema>;
 
-// The output can be the processed data or null if not found
-// Use the imported schema directly for the output definition
-const GetAnalysisReportOutputSchema = ProcessedFeedbackDataSchema.nullable();
-export type GetAnalysisReportOutput = ProcessedFeedbackDataForSave | null; // Adjusted type to match schema
+const AnalysisDetailsSchema = z.object({
+  id: z.string().describe("The Firestore document ID of the analysis."),
+  name: z.string().describe("The user-defined name of the analysis report."),
+  createdAt: z.string().datetime({ offset: true }).describe("ISO 8601 datetime string of when the report was created."),
+  sourceFileName: z.string().describe("Original name of the uploaded CSV file."),
+});
+
+const GetAnalysisReportOutputSchema = z.object({
+  processedData: ProcessedFeedbackDataSchema,
+  analysisDetails: AnalysisDetailsSchema,
+}).nullable(); // Output can be null if report not found
+
+// Adjusted type to match the new output schema
+export type GetAnalysisReportOutput = {
+  processedData: ProcessedFeedbackDataForSave;
+  analysisDetails: z.infer<typeof AnalysisDetailsSchema>;
+} | null;
 
 
 export async function getAnalysisReport(
   input: GetAnalysisReportInput
-): Promise<GetAnalysisReportOutput> { // Ensure Promise type matches the actual return
+): Promise<GetAnalysisReportOutput> {
   return getAnalysisReportFlow(input);
 }
 
@@ -40,7 +52,7 @@ const getAnalysisReportFlow = ai.defineFlow(
     inputSchema: GetAnalysisReportInputSchema,
     outputSchema: GetAnalysisReportOutputSchema,
   },
-  async (input): Promise<GetAnalysisReportOutput> => { // Explicit return type for clarity
+  async (input): Promise<GetAnalysisReportOutput> => {
     try {
       const docRef = firestore.collection('analyses').doc(input.analysisId);
       const docSnap = await docRef.get();
@@ -51,26 +63,29 @@ const getAnalysisReportFlow = ai.defineFlow(
       }
 
       const data = docSnap.data();
-      // Ensure data and processedData exist before trying to access
-      if (data && data.processedData) {
-        // Validate the fetched data against the schema.
-        // Zod's .parse() will throw an error if it doesn't match.
-        // For a nullable schema, you might need to handle the null case if data.processedData could be null itself.
-        // Assuming processedData will always be an object if it exists.
-        try {
-          // Pass the data through Zod's parse method to ensure it conforms
-          // to the ProcessedFeedbackDataSchema. This also acts as a type cast.
-          const parsedData = ProcessedFeedbackDataSchema.parse(data.processedData);
-          return parsedData as ProcessedFeedbackDataForSave; // Explicit cast to the TS type
-        } catch (validationError) {
-            console.error(`Validation error for report ID ${input.analysisId}:`, validationError);
-            // Optionally, return null or throw a more specific error
-            // if data structure from DB is unexpectedly different.
-            return null; 
-        }
-      } else {
-        console.warn(`ProcessedData missing or malformed in report ID ${input.analysisId}. Document data:`, data);
+      if (!data || !data.processedData || !data.analysisName || !data.createdAt || !data.sourceFileName) {
+        console.warn(`Report data incomplete for ID ${input.analysisId}. Document data:`, data);
         return null;
+      }
+
+      try {
+        const parsedProcessedData = ProcessedFeedbackDataSchema.parse(data.processedData);
+        
+        const reportOutput: NonNullable<GetAnalysisReportOutput> = {
+          processedData: parsedProcessedData as ProcessedFeedbackDataForSave,
+          analysisDetails: {
+            id: docSnap.id,
+            name: data.analysisName,
+            // Firestore Timestamp to ISO string
+            createdAt: data.createdAt.toDate().toISOString(), 
+            sourceFileName: data.sourceFileName,
+          }
+        };
+        return reportOutput;
+
+      } catch (validationError) {
+          console.error(`Validation error for report ID ${input.analysisId}:`, validationError);
+          return null; 
       }
 
     } catch (error: any) {
