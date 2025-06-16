@@ -1,7 +1,11 @@
+// This file is no longer used as topic extraction is now part of the batch processing flow.
+// Kept for reference or if single-item analysis is needed elsewhere in the future.
+// Consider deleting if no longer relevant.
 'use server';
 
 /**
  * @fileOverview Extracts the main topics discussed in customer feedback.
+ * @deprecated Replaced by analyze-feedback-batch.ts
  *
  * - extractFeedbackTopics - A function that extracts topics from feedback.
  * - ExtractFeedbackTopicsInput - The input type for the extractFeedbackTopics function.
@@ -50,3 +54,4 @@ const extractFeedbackTopicsFlow = ai.defineFlow(
     return output!;
   }
 );
+

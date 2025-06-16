@@ -10,8 +10,7 @@ import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Loader2, AlertCircle, Sparkles, FileUp, Brain, BarChart3 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { analyzeFeedbackSentiment } from '@/ai/flows/analyze-feedback-sentiment';
-import { extractFeedbackTopics } from '@/ai/flows/extract-feedback-topics';
+import { analyzeFeedbackBatch, AnalyzeFeedbackBatchInputItem, AnalyzeFeedbackBatchOutputItem } from '@/ai/flows/analyze-feedback-batch';
 import { surfaceUrgentIssues } from '@/ai/flows/surface-urgent-issues';
 import type { 
   RawFeedbackItem, 
@@ -32,7 +31,6 @@ function parseCSV(text: string): { headers: string[]; rows: RawFeedbackItem[] } 
   const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
   
   const rows = lines.slice(1).map(line => {
-    // Improved CSV parsing to handle commas within quoted fields
     const values = [];
     let inQuotes = false;
     let currentValue = '';
@@ -62,6 +60,7 @@ function parseCSV(text: string): { headers: string[]; rows: RawFeedbackItem[] } 
   return { headers, rows };
 }
 
+const BATCH_SIZE = 15; // Process 15 items per AI call
 
 export default function HomePage() {
   const [currentStage, setCurrentStage] = useState<'upload' | 'map_columns' | 'analyzing' | 'dashboard'>('upload');
@@ -113,84 +112,85 @@ export default function HomePage() {
     setActiveTopicFilter(null);
 
     const totalItems = csvRows.length;
-    let processedCount = 0;
+    let successfullyProcessedItemsCount = 0;
+    const allAnalyzedData: FeedbackItem[] = [];
+
+    // Prepare items with IDs and original data for batching
+    const itemsToProcess: Array<AnalyzeFeedbackBatchInputItem & { originalIndex: number, timestamp?: Date, fullData: RawFeedbackItem }> = csvRows.map((rawItem, index) => {
+      const feedbackText = rawItem[mapping.feedbackTextColumn] || '';
+      let timestamp: Date | undefined = undefined;
+      if (mapping.timestampColumn && rawItem[mapping.timestampColumn]) {
+        const tsValue = Date.parse(rawItem[mapping.timestampColumn]);
+        if (!isNaN(tsValue)) {
+          timestamp = new Date(tsValue);
+        }
+      }
+      return {
+        id: `fb-${index}-${Date.now()}`, // Unique ID for this processing run
+        feedbackText,
+        originalIndex: index,
+        timestamp,
+        fullData: rawItem,
+      };
+    });
 
     try {
-      const analyzedItems: FeedbackItem[] = await Promise.all(
-        csvRows.map(async (rawItem, index): Promise<FeedbackItem> => {
-          const feedbackText = rawItem[mapping.feedbackTextColumn] || '';
-          let timestamp: Date | undefined = undefined;
-          if (mapping.timestampColumn && rawItem[mapping.timestampColumn]) {
-            const tsValue = Date.parse(rawItem[mapping.timestampColumn]);
-            if (!isNaN(tsValue)) {
-              timestamp = new Date(tsValue);
+      // Process in batches
+      for (let i = 0; i < itemsToProcess.length; i += BATCH_SIZE) {
+        const batchInputItems = itemsToProcess.slice(i, i + BATCH_SIZE).map(item => ({
+          id: item.id,
+          feedbackText: item.feedbackText
+        }));
+        
+        if (batchInputItems.length === 0) continue;
+
+        try {
+          const batchResults = await analyzeFeedbackBatch(batchInputItems);
+          
+          // Merge batch results with original item data
+          const resultsMap = new Map(batchResults.map(res => [res.id, res]));
+
+          batchInputItems.forEach(inputItem => {
+            const originalFullItem = itemsToProcess.find(orig => orig.id === inputItem.id);
+            if (originalFullItem) {
+              const aiResult = resultsMap.get(inputItem.id);
+              allAnalyzedData.push({
+                id: originalFullItem.id,
+                originalIndex: originalFullItem.originalIndex,
+                fullData: originalFullItem.fullData,
+                feedbackText: originalFullItem.feedbackText,
+                timestamp: originalFullItem.timestamp,
+                sentiment: aiResult?.sentiment, // Will be undefined if AI didn't return this ID
+                sentimentScore: aiResult?.sentiment ? (aiResult.sentiment === 'positive' ? 1 : aiResult.sentiment === 'negative' ? -1 : 0) : undefined, // Basic score
+                topics: aiResult?.topics, // Will be undefined if AI didn't return this ID
+              });
+              if (aiResult) successfullyProcessedItemsCount++;
             }
-          }
+          });
 
-          let sentimentResult, topicsResult;
-          try {
-             sentimentResult = await analyzeFeedbackSentiment({ feedbackText });
-          } catch (e: any) {
-            const errorMessage = e instanceof Error ? e.message : String(e);
-            const isRateLimitError = errorMessage.includes("429 Too Many Requests") || errorMessage.includes("Quota");
-
-            if (isRateLimitError) {
-                console.warn(`Sentiment analysis for item ${index+1} limited by API rate limits:`, errorMessage);
-            } else {
-                console.error(`Sentiment analysis failed for item ${index+1}:`, errorMessage, e);
-            }
-
-            const userFriendlyMessage = isRateLimitError
-              ? `Sentiment analysis for item ${index+1} failed due to API rate limits. Its sentiment might be missing.`
-              : `Sentiment analysis for item ${index+1} failed: ${errorMessage.substring(0,100)}. Check console.`;
-            toast({
-              title: "Sentiment Analysis Limited",
-              description: userFriendlyMessage,
-              variant: "destructive"
-            });
-          }
-          try {
-             topicsResult = await extractFeedbackTopics({ feedbackText });
-          } catch (e: any) {
-            const errorMessage = e instanceof Error ? e.message : String(e);
-            const isRateLimitError = errorMessage.includes("429 Too Many Requests") || errorMessage.includes("Quota");
-
-            if (isRateLimitError) {
-              console.warn(`Topic extraction for item ${index+1} limited by API rate limits:`, errorMessage);
-            } else {
-              console.error(`Topic extraction failed for item ${index+1}:`, errorMessage, e);
-            }
-            
-            const userFriendlyMessage = isRateLimitError
-              ? `Topic extraction for item ${index+1} failed due to API rate limits. Its topics might be missing.`
-              : `Topic extraction for item ${index+1} failed: ${errorMessage.substring(0,100)}. Check console.`;
-            toast({
-              title: "Topic Extraction Limited",
-              description: userFriendlyMessage,
-              variant: "destructive"
-            });
-          }
-
-          processedCount++;
-          setAnalysisProgress(Math.round((processedCount / totalItems) * 50)); 
-
-          return {
-            id: `fb-${index}-${Date.now()}`,
-            originalIndex: index,
-            fullData: rawItem,
-            feedbackText,
-            timestamp,
-            sentiment: sentimentResult?.sentiment as FeedbackSentimentLabel | undefined,
-            sentimentScore: sentimentResult?.score,
-            topics: topicsResult?.topics,
-          };
-        })
-      );
+        } catch (batchError: any) {
+          const errorMessage = batchError instanceof Error ? batchError.message : String(batchError);
+          const isRateLimitError = errorMessage.includes("429") || errorMessage.includes("Quota");
+          const toastMessage = isRateLimitError 
+            ? `Analysis for a batch of items failed due to API rate limits. Some results may be missing.`
+            : `Analysis for a batch of items failed: ${errorMessage.substring(0, 100)}. Check console.`;
+          
+          toast({
+            title: "Batch Analysis Error",
+            description: toastMessage,
+            variant: "destructive"
+          });
+          if (isRateLimitError) console.warn("Batch analysis error:", errorMessage, batchError);
+          else console.error("Batch analysis error:", errorMessage, batchError);
+          // Continue to next batch, items in this failed batch won't be added
+        }
+        setAnalysisProgress(Math.round(((i + batchInputItems.length) / totalItems) * 70)); // Batch analysis up to 70%
+      }
       
-      setAnalysisProgress(50);
+      setAnalysisProgress(70);
 
-      const insightsPayload = analyzedItems
-        .filter(item => item.sentiment && item.feedbackText)
+      const insightsPayload = allAnalyzedData
+        .filter(item => item.sentiment && item.feedbackText) // Ensure item was successfully processed
         .map(item => ({ text: item.feedbackText, sentiment: item.sentiment! }));
 
       let keyInsightsData: ProcessedFeedbackData['keyInsights'] = null;
@@ -201,12 +201,6 @@ export default function HomePage() {
            const errorMessage = e instanceof Error ? e.message : String(e);
            const isRateLimitError = errorMessage.includes("429 Too Many Requests") || errorMessage.includes("Quota");
 
-           if (isRateLimitError) {
-             console.warn("Key insight generation limited by API rate limits:", errorMessage);
-           } else {
-             console.error("Surface urgent issues failed:", errorMessage, e);
-           }
-
            const userFriendlyMessage = isRateLimitError
             ? "Could not generate key insights due to API rate limits. Some insights might be unavailable."
             : `Could not generate key insights: ${errorMessage.substring(0,100)}. Check console for details.`;
@@ -215,12 +209,14 @@ export default function HomePage() {
             description: userFriendlyMessage, 
             variant: "destructive" 
           });
+           if (isRateLimitError) console.warn("Key insight generation limited by API rate limits:", errorMessage);
+           else console.error("Surface urgent issues failed:", errorMessage, e);
         }
       }
-      setAnalysisProgress(70);
+      setAnalysisProgress(85); // Key insights step
 
       const sentimentCountsByDate: Record<string, { positive: number; negative: number; neutral: number }> = {};
-      analyzedItems.forEach(item => {
+      allAnalyzedData.forEach(item => {
         if (item.timestamp && item.sentiment) {
           const dateStr = item.timestamp.toISOString().split('T')[0];
           if (!sentimentCountsByDate[dateStr]) {
@@ -250,10 +246,10 @@ export default function HomePage() {
           .sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
       }
       
-      setAnalysisProgress(85);
+      setAnalysisProgress(95); // Chart data prep
 
       const topicSentimentCounts: Record<string, { positive: number; negative: number; neutral: number; total: number; }> = {};
-      analyzedItems.forEach(item => {
+      allAnalyzedData.forEach(item => {
         item.topics?.forEach(topic => {
           if (!topicSentimentCounts[topic]) {
             topicSentimentCounts[topic] = { positive: 0, negative: 0, neutral: 0, total: 0 };
@@ -269,7 +265,7 @@ export default function HomePage() {
         .sort((a, b) => b.total - a.total);
 
       setProcessedData({
-        feedbackItems: analyzedItems,
+        feedbackItems: allAnalyzedData,
         sentimentOverTime: initialSentimentOverTimeData, 
         topicDistribution: topicDistributionData,
         keyInsights: keyInsightsData,
@@ -277,10 +273,14 @@ export default function HomePage() {
       
       setAnalysisProgress(100);
       setCurrentStage('dashboard');
-      toast({ title: "Analysis Complete!", description: "Your feedback dashboard is ready.", className: "bg-primary text-primary-foreground" });
+      toast({ 
+        title: "Analysis Complete!", 
+        description: `${successfullyProcessedItemsCount} of ${totalItems} items fully analyzed. Your feedback dashboard is ready.`, 
+        className: "bg-primary text-primary-foreground" 
+      });
 
-    } catch (error: any) {
-      console.error("Analysis failed:", error);
+    } catch (error: any) { // Catch errors from the overall analysis setup, not batch specific
+      console.error("Overall analysis failed:", error);
       const generalErrorMessage = error instanceof Error ? error.message : String(error);
       setAnalysisError(`Analysis failed: ${generalErrorMessage}`);
       toast({ title: "Analysis Error", description: `Analysis process encountered an error: ${generalErrorMessage.substring(0,150)}`, variant: "destructive" });
@@ -335,7 +335,7 @@ export default function HomePage() {
           <div className="flex flex-col items-center justify-center min-h-[400px] text-center">
             <Loader2 className="h-16 w-16 animate-spin text-primary mb-6" />
             <h2 className="text-2xl font-headline mb-2 text-foreground">Analyzing Feedback...</h2>
-            <p className="text-muted-foreground mb-4">Please wait while we process your data. This may take a few moments.</p>
+            <p className="text-muted-foreground mb-4">Please wait while we process your data in batches. This may take a few moments.</p>
             <Progress value={analysisProgress} className="w-full max-w-md" />
             <p className="text-sm text-muted-foreground mt-2">{analysisProgress}% complete</p>
           </div>
@@ -365,8 +365,8 @@ export default function HomePage() {
 
   return (
     <div className="container mx-auto py-8 px-4 flex flex-col items-center min-h-screen">
-      <header className="w-full flex justify-between items-start mb-8 text-center"> {/* Changed items-center to items-start */}
-        <div className="flex-1 text-center pt-1"> {/* Added pt-1 for slight alignment tweak if needed */}
+      <header className="w-full flex justify-between items-start mb-8 text-center">
+        <div className="flex-1 text-center pt-1">
           <h1 className="text-5xl font-bold font-headline text-primary flex items-center justify-center">
             <Sparkles className="w-12 h-12 mr-3 text-accent" />
             Feedback Lens
@@ -389,9 +389,9 @@ export default function HomePage() {
           </Alert>
         )}
         {renderContent()}
-        {(currentStage === 'dashboard' || (currentStage === 'map_columns' && csvRows.length > 0) || currentStage === 'upload') && (
+        {(currentStage === 'dashboard' || (currentStage === 'map_columns' && csvRows.length > 0) || (currentStage === 'upload' && file)) && (
           <div className="mt-8 text-center">
-            <Button variant="outline" onClick={handleReset} disabled={currentStage === 'upload' && !file}>
+            <Button variant="outline" onClick={handleReset} disabled={currentStage === 'analyzing'}>
               {currentStage === 'upload' && !file ? 'Start by Uploading a File' : 'Analyze Another File'}
             </Button>
           </div>
