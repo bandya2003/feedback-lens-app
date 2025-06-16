@@ -8,22 +8,26 @@ import { Dashboard } from '@/components/feedback-lens/Dashboard';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Loader2, AlertCircle, Sparkles, FileUp, Brain, BarChart3 } from 'lucide-react';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Loader2, AlertCircle, FileUp, Brain, BarChart3, Save } from 'lucide-react'; 
 import { useToast } from '@/hooks/use-toast';
-import { analyzeFeedbackBatch, AnalyzeFeedbackBatchInput, AnalyzeFeedbackBatchInputItem, AnalyzeFeedbackBatchOutput, AnalyzeFeedbackBatchOutputItem } from '@/ai/flows/analyze-feedback-batch';
+import { analyzeFeedbackBatch, AnalyzeFeedbackBatchInput, AnalyzeFeedbackBatchOutput } from '@/ai/flows/analyze-feedback-batch';
 import { surfaceUrgentIssues } from '@/ai/flows/surface-urgent-issues';
-import type { 
-  RawFeedbackItem, 
-  FeedbackItem, 
-  ProcessedFeedbackData, 
+import { saveAnalysis, SaveAnalysisInput, ProcessedFeedbackDataForSave } from '@/ai/flows/save-analysis-flow.ts'; 
+import { getClientUserId } from '@/lib/client-user-id'; // Import the new utility
+import type {
+  RawFeedbackItem,
+  FeedbackItem,
+  ProcessedFeedbackData,
   ColumnMapping,
-  FeedbackSentimentLabel,
   SentimentDataPoint,
   TopicSentimentDistribution
 } from '@/types/feedback';
-import { ThemeToggleButton } from '@/components/ThemeToggleButton';
 
-// Basic CSV parser (Consider using a library for robustness)
+
+// Basic CSV parser
 function parseCSV(text: string): { headers: string[]; rows: RawFeedbackItem[] } {
   const lines = text.trim().split('\n');
   if (lines.length === 0) return { headers: [], rows: [] };
@@ -38,7 +42,7 @@ function parseCSV(text: string): { headers: string[]; rows: RawFeedbackItem[] } 
       const char = line[i];
       if (char === '"') {
         inQuotes = !inQuotes;
-        if (i + 1 < line.length && line[i+1] === '"') { // Handle escaped quotes ""
+        if (i + 1 < line.length && line[i+1] === '"') { 
           currentValue += '"';
           i++; 
         }
@@ -49,7 +53,7 @@ function parseCSV(text: string): { headers: string[]; rows: RawFeedbackItem[] } 
         currentValue += char;
       }
     }
-    values.push(currentValue.trim().replace(/^"|"$/g, '')); // Add the last value
+    values.push(currentValue.trim().replace(/^"|"$/g, '')); 
 
     const row: RawFeedbackItem = {};
     headers.forEach((header, index) => {
@@ -60,7 +64,7 @@ function parseCSV(text: string): { headers: string[]; rows: RawFeedbackItem[] } 
   return { headers, rows };
 }
 
-const BATCH_SIZE = 15; // Process 15 items per AI call
+const BATCH_SIZE = 15;
 
 export default function HomePage() {
   const [currentStage, setCurrentStage] = useState<'upload' | 'map_columns' | 'analyzing' | 'dashboard'>('upload');
@@ -74,7 +78,31 @@ export default function HomePage() {
   const [analysisProgress, setAnalysisProgress] = useState(0);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
 
+  const [isSaveDialogOpen, setIsSaveDialogOpen] = useState(false);
+  const [currentAnalysisName, setCurrentAnalysisName] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+
   const { toast } = useToast();
+
+  useEffect(() => {
+    // Ensure getClientUserId is called client-side
+    const id = getClientUserId();
+    if (id) {
+      setCurrentUserId(id);
+    } else {
+      // Handle case where ID couldn't be generated (e.g., SSR or no localStorage)
+      // For a prototype, we might disable saving or show a warning.
+      console.warn("Could not retrieve client user ID. Saving reports might not work as expected.");
+      toast({
+        title: "User ID Issue",
+        description: "Could not establish a user session. Saved reports might not be linked to you.",
+        variant: "destructive",
+        duration: 5000,
+      });
+    }
+  }, [toast]);
+
 
   const handleFileSelect = useCallback(async (selectedFile: File) => {
     setFile(selectedFile);
@@ -104,18 +132,20 @@ export default function HomePage() {
   }, [toast]);
 
   const handleAnalyze = useCallback(async (mapping: ColumnMapping) => {
-    if (!csvRows.length || !mapping.feedbackTextColumn) return;
+    if (!csvRows.length || !mapping.feedbackTextColumn || !file) return;
 
     setCurrentStage('analyzing');
     setAnalysisProgress(0);
     setAnalysisError(null);
     setActiveTopicFilter(null);
+    setCurrentAnalysisName(file.name.replace(/\.csv$/i, '') + ' Analysis');
+
 
     const totalItems = csvRows.length;
     let successfullyProcessedItemsCount = 0;
     const allAnalyzedData: FeedbackItem[] = [];
 
-    const itemsToProcess: Array<AnalyzeFeedbackBatchInputItem & { originalIndex: number, timestamp?: Date, fullData: RawFeedbackItem }> = csvRows.map((rawItem, index) => {
+    const itemsToProcess: Array<AnalyzeFeedbackBatchInput[number] & { originalIndex: number, timestamp?: Date, fullData: RawFeedbackItem }> = csvRows.map((rawItem, index) => {
       const feedbackText = rawItem[mapping.feedbackTextColumn] || '';
       let timestamp: Date | undefined = undefined;
       if (mapping.timestampColumn && rawItem[mapping.timestampColumn]) {
@@ -157,7 +187,7 @@ export default function HomePage() {
                 originalIndex: originalItemInBatch.originalIndex,
                 fullData: originalItemInBatch.fullData,
                 feedbackText: originalItemInBatch.feedbackText,
-                timestamp: originalItemInBatch.timestamp,
+                timestamp: originalItemInBatch.timestamp, // This is a Date object or undefined
                 sentiment: aiResult?.sentiment, 
                 sentimentScore: aiResult?.sentiment ? (aiResult.sentiment === 'positive' ? 1 : aiResult.sentiment === 'negative' ? -1 : 0) : undefined, 
                 topics: aiResult?.topics, 
@@ -187,7 +217,7 @@ export default function HomePage() {
             variant: "destructive"
           });
 
-          if (isApiLimitOrUnavailableError) console.warn(`Batch ${currentBatchNumber} analysis error:`, errorMessage, batchError);
+          if (isApiLimitOrUnavailableError) console.warn(`Batch ${currentBatchNumber} analysis error:`, errorMessage);
           else console.error(`Batch ${currentBatchNumber} analysis error:`, errorMessage, batchError);
         }
         setAnalysisProgress(Math.round(((i + batchInputItems.length) / totalItems) * 70)); 
@@ -211,7 +241,6 @@ export default function HomePage() {
              errorMessage.includes("503") ||
              errorMessage.toLowerCase().includes("service unavailable") ||
              errorMessage.toLowerCase().includes("model is overloaded");
-
 
            const userFriendlyMessage = isApiLimitOrUnavailableErrorInsights
             ? "Could not generate key insights due to API limits or service unavailability. Some insights might be unavailable."
@@ -300,7 +329,62 @@ export default function HomePage() {
       setCurrentStage('map_columns'); 
       setAnalysisProgress(0);
     }
-  }, [csvRows, toast]);
+  }, [csvRows, toast, file]);
+
+  const handleSaveAnalysisConfirmed = async () => {
+    if (!processedData || !file || !currentAnalysisName.trim()) {
+      toast({
+        title: "Cannot Save Report",
+        description: "Missing data or report name. Please ensure analysis is complete and a name is provided.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!currentUserId) {
+      toast({
+        title: "Cannot Save Report",
+        description: "User session ID is missing. Please refresh the page and try again.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      // Convert Date objects in feedbackItems to ISO strings before saving
+      const processedDataForSave: ProcessedFeedbackDataForSave = {
+        ...processedData,
+        feedbackItems: processedData.feedbackItems.map(item => ({
+          ...item,
+          timestamp: item.timestamp instanceof Date ? item.timestamp.toISOString() : undefined,
+        })),
+      };
+
+      const input: SaveAnalysisInput = {
+        userId: currentUserId, // Use the dynamic userId
+        analysisName: currentAnalysisName.trim(),
+        sourceFileName: file.name,
+        processedData: processedDataForSave,
+      };
+      const result = await saveAnalysis(input);
+      toast({
+        title: "Report Saved!",
+        description: `${result.message} (ID: ${result.analysisId.substring(0,6)}...)`,
+        className: "bg-primary text-primary-foreground"
+      });
+      setIsSaveDialogOpen(false);
+    } catch (error: any) {
+      console.error("Error saving analysis:", error);
+      toast({
+        title: "Save Failed",
+        description: `Could not save the report: ${error.message || 'Unknown error'}`,
+        variant: "destructive",
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const handleReset = () => {
     setFile(null);
@@ -311,6 +395,10 @@ export default function HomePage() {
     setAnalysisError(null);
     setAnalysisProgress(0);
     setCurrentStage('upload');
+    setCurrentAnalysisName('');
+    setIsSaveDialogOpen(false);
+    setIsSaving(false);
+    // Note: currentUserId remains, as it's tied to the browser session
   };
   
   const renderContent = () => {
@@ -378,22 +466,8 @@ export default function HomePage() {
 
   return (
     <div className="container mx-auto py-8 px-4 flex flex-col items-center min-h-screen">
-      <header className="w-full flex justify-between items-start mb-8 text-center">
-        <div className="flex-1 text-center pt-1">
-          <h1 className="text-5xl font-bold font-headline text-primary flex items-center justify-center">
-            <Sparkles className="w-12 h-12 mr-3 text-accent" />
-            Feedback Lens
-          </h1>
-          <p className="text-lg text-muted-foreground mt-2">
-            AI-powered insights from your customer feedback.
-          </p>
-        </div>
-        <div className="ml-auto"> 
-          <ThemeToggleButton />
-        </div>
-      </header>
       
-      <main className="w-full max-w-7xl">
+      <div className="w-full max-w-7xl"> 
         {analysisError && (
           <Alert variant="destructive" className="mb-6">
             <AlertCircle className="h-4 w-4" />
@@ -402,14 +476,59 @@ export default function HomePage() {
           </Alert>
         )}
         {renderContent()}
-        {(currentStage === 'dashboard' || (currentStage === 'map_columns' && csvRows.length > 0) || (currentStage === 'upload' && file)) && (
-          <div className="mt-8 text-center">
-            <Button variant="outline" onClick={handleReset} disabled={currentStage === 'analyzing'}>
-              {currentStage === 'upload' && !file ? 'Start by Uploading a File' : 'Analyze Another File'}
-            </Button>
-          </div>
-        )}
-      </main>
+
+        <div className="mt-8 text-center space-x-4">
+            {(currentStage === 'dashboard' || (currentStage === 'map_columns' && csvRows.length > 0) || (currentStage === 'upload' && file)) && (
+                <Button variant="outline" onClick={handleReset} disabled={currentStage === 'analyzing' || isSaving}>
+                  {currentStage === 'upload' && !file ? 'Start by Uploading a File' : 'Analyze Another File'}
+                </Button>
+            )}
+
+            {currentStage === 'dashboard' && processedData && (
+                <Dialog open={isSaveDialogOpen} onOpenChange={setIsSaveDialogOpen}>
+                    <DialogTrigger asChild>
+                        <Button variant="default" disabled={isSaving || !currentUserId}>
+                            <Save className="mr-2 h-4 w-4" />
+                            {isSaving ? 'Saving...' : 'Save Current Analysis'}
+                        </Button>
+                    </DialogTrigger>
+                    <DialogContent className="sm:max-w-[425px]">
+                        <DialogHeader>
+                        <DialogTitle>Save Analysis Report</DialogTitle>
+                        <DialogDescription>
+                            Enter a name for this analysis report. This will save the current dashboard view for your session.
+                        </DialogDescription>
+                        </DialogHeader>
+                        <div className="grid gap-4 py-4">
+                        <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="analysisName" className="text-right">
+                            Report Name
+                            </Label>
+                            <Input
+                            id="analysisName"
+                            value={currentAnalysisName}
+                            onChange={(e) => setCurrentAnalysisName(e.target.value)}
+                            className="col-span-3"
+                            placeholder="e.g., Q3 Product Feedback"
+                            />
+                        </div>
+                        </div>
+                        <DialogFooter>
+                          <DialogClose asChild>
+                            <Button type="button" variant="outline" disabled={isSaving}>
+                                Cancel
+                            </Button>
+                          </DialogClose>
+                          <Button type="button" onClick={handleSaveAnalysisConfirmed} disabled={isSaving || !currentAnalysisName.trim() || !currentUserId}>
+                              {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                              Save Report
+                          </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+            )}
+        </div>
+      </div>
       <footer className="w-full text-center mt-auto py-6">
         <div className="flex justify-center items-center space-x-4">
           <p className="text-sm text-muted-foreground">
@@ -420,4 +539,3 @@ export default function HomePage() {
     </div>
   );
 }
-
