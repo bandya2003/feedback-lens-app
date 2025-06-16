@@ -11,8 +11,11 @@
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 import { firestore } from '@/lib/firebaseAdmin';
-// Re-using the schema defined in save-analysis-flow.ts for the processed data
-import { type ProcessedFeedbackDataForSave, ProcessedFeedbackDataSchema as ProcessedFeedbackDataForSaveSchema } from './save-analysis-flow';
+// Import the schema and type from the new central location
+import { 
+    type ProcessedFeedbackDataForSave, 
+    ProcessedFeedbackDataSchema 
+} from '@/ai/schemas/processed-data-schema'; // Updated import
 
 const GetAnalysisReportInputSchema = z.object({
   analysisId: z.string().describe("The Firestore document ID of the analysis to fetch."),
@@ -20,13 +23,14 @@ const GetAnalysisReportInputSchema = z.object({
 export type GetAnalysisReportInput = z.infer<typeof GetAnalysisReportInputSchema>;
 
 // The output can be the processed data or null if not found
-const GetAnalysisReportOutputSchema = ProcessedFeedbackDataForSaveSchema.nullable();
-export type GetAnalysisReportOutput = z.infer<typeof GetAnalysisReportOutputSchema>;
+// Use the imported schema directly for the output definition
+const GetAnalysisReportOutputSchema = ProcessedFeedbackDataSchema.nullable();
+export type GetAnalysisReportOutput = ProcessedFeedbackDataForSave | null; // Adjusted type to match schema
 
 
 export async function getAnalysisReport(
   input: GetAnalysisReportInput
-): Promise<GetAnalysisReportOutput> {
+): Promise<GetAnalysisReportOutput> { // Ensure Promise type matches the actual return
   return getAnalysisReportFlow(input);
 }
 
@@ -36,7 +40,7 @@ const getAnalysisReportFlow = ai.defineFlow(
     inputSchema: GetAnalysisReportInputSchema,
     outputSchema: GetAnalysisReportOutputSchema,
   },
-  async (input) => {
+  async (input): Promise<GetAnalysisReportOutput> => { // Explicit return type for clarity
     try {
       const docRef = firestore.collection('analyses').doc(input.analysisId);
       const docSnap = await docRef.get();
@@ -47,13 +51,25 @@ const getAnalysisReportFlow = ai.defineFlow(
       }
 
       const data = docSnap.data();
+      // Ensure data and processedData exist before trying to access
       if (data && data.processedData) {
-        // We need to ensure the fetched data conforms to our schema,
-        // especially if data structure might change or be inconsistent.
-        // For now, we cast it, but in a production app, more robust validation might be needed.
-        return data.processedData as ProcessedFeedbackDataForSave;
+        // Validate the fetched data against the schema.
+        // Zod's .parse() will throw an error if it doesn't match.
+        // For a nullable schema, you might need to handle the null case if data.processedData could be null itself.
+        // Assuming processedData will always be an object if it exists.
+        try {
+          // Pass the data through Zod's parse method to ensure it conforms
+          // to the ProcessedFeedbackDataSchema. This also acts as a type cast.
+          const parsedData = ProcessedFeedbackDataSchema.parse(data.processedData);
+          return parsedData as ProcessedFeedbackDataForSave; // Explicit cast to the TS type
+        } catch (validationError) {
+            console.error(`Validation error for report ID ${input.analysisId}:`, validationError);
+            // Optionally, return null or throw a more specific error
+            // if data structure from DB is unexpectedly different.
+            return null; 
+        }
       } else {
-        console.warn(`ProcessedData missing in report ID ${input.analysisId}.`);
+        console.warn(`ProcessedData missing or malformed in report ID ${input.analysisId}. Document data:`, data);
         return null;
       }
 

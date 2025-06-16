@@ -1,3 +1,4 @@
+
 'use server';
 /**
  * @fileOverview A Genkit flow for saving analysis results to Firestore.
@@ -10,51 +11,13 @@
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 import { admin, firestore } from '@/lib/firebaseAdmin'; // Import initialized admin and firestore
+import { 
+    ProcessedFeedbackDataSchema, 
+    type ProcessedFeedbackDataForSave 
+} from '@/ai/schemas/processed-data-schema'; // Updated import
 
-
-// Schemas for data to be saved, mirroring parts of ProcessedFeedbackData
-const FeedbackSentimentLabelSchema = z.enum(['positive', 'negative', 'neutral']);
-
-const RawFeedbackItemSchema = z.record(z.string()); // [key: string]: string
-
-const FeedbackItemSchema = z.object({
-  id: z.string(),
-  originalIndex: z.number(),
-  fullData: RawFeedbackItemSchema,
-  feedbackText: z.string(),
-  timestamp: z.string().datetime({ offset: true }).optional().describe("ISO 8601 datetime string if available"),
-  sentiment: FeedbackSentimentLabelSchema.optional(),
-  sentimentScore: z.number().optional(),
-  topics: z.array(z.string()).optional(),
-});
-
-const SentimentDataPointSchema = z.object({
-  date: z.string(),
-  positive: z.number(),
-  negative: z.number(),
-  neutral: z.number(),
-});
-
-const TopicSentimentDistributionSchema = z.object({
-  name: z.string(),
-  positive: z.number(),
-  negative: z.number(),
-  neutral: z.number(),
-  total: z.number(),
-});
-
-const KeyInsightsSchema = z.object({
-  urgentIssue: z.string(),
-  overallSentiment: z.string(),
-}).nullable();
-
-const ProcessedFeedbackDataSchema = z.object({
-  feedbackItems: z.array(FeedbackItemSchema),
-  sentimentOverTime: z.array(SentimentDataPointSchema),
-  topicDistribution: z.array(TopicSentimentDistributionSchema),
-  keyInsights: KeyInsightsSchema,
-});
-export type ProcessedFeedbackDataForSave = z.infer<typeof ProcessedFeedbackDataSchema>;
+// Export type derived from the imported schema
+export type { ProcessedFeedbackDataForSave };
 
 
 const SaveAnalysisInputSchema = z.object({
