@@ -1,8 +1,9 @@
+
 /**
  * @fileOverview Firebase Admin SDK initialization.
  * This needs to be done once per application instance.
  */
-import *_admin from 'firebase-admin';
+import * as _admin from 'firebase-admin';
 
 // Check if Firebase Admin SDK has already been initialized
 if (!_admin.apps.length) {
