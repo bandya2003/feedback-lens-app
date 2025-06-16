@@ -112,6 +112,7 @@ export default function HistoryPage() {
             checked={isCompareModeActive}
             onCheckedChange={handleCompareModeToggle}
             aria-label="Toggle compare mode"
+            className="data-[state=unchecked]:bg-transparent data-[state=unchecked]:border-input-border"
           />
           <Label htmlFor="compare-mode-toggle" className="font-medium text-foreground">
             Enable Compare Mode {isCompareModeActive && `(${selectedReports.length}/2 selected)`}
