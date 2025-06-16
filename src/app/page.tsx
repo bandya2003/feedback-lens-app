@@ -115,7 +115,6 @@ export default function HomePage() {
     let successfullyProcessedItemsCount = 0;
     const allAnalyzedData: FeedbackItem[] = [];
 
-    // Prepare items with IDs and original data for batching
     const itemsToProcess: Array<AnalyzeFeedbackBatchInputItem & { originalIndex: number, timestamp?: Date, fullData: RawFeedbackItem }> = csvRows.map((rawItem, index) => {
       const feedbackText = rawItem[mapping.feedbackTextColumn] || '';
       let timestamp: Date | undefined = undefined;
@@ -126,7 +125,7 @@ export default function HomePage() {
         }
       }
       return {
-        id: `fb-${index}-${Date.now()}`, // Unique ID for this processing run
+        id: `fb-${index}-${Date.now()}`, 
         feedbackText,
         originalIndex: index,
         timestamp,
@@ -135,8 +134,9 @@ export default function HomePage() {
     });
 
     try {
-      // Process in batches
+      const totalBatchCount = Math.ceil(itemsToProcess.length / BATCH_SIZE);
       for (let i = 0; i < itemsToProcess.length; i += BATCH_SIZE) {
+        const currentBatchNumber = Math.floor(i / BATCH_SIZE) + 1;
         const batchInputItems = itemsToProcess.slice(i, i + BATCH_SIZE).map(item => ({
           id: item.id,
           feedbackText: item.feedbackText
@@ -147,7 +147,6 @@ export default function HomePage() {
         try {
           const batchResults = await analyzeFeedbackBatch(batchInputItems);
           
-          // Merge batch results with original item data
           const resultsMap = new Map(batchResults.map(res => [res.id, res]));
 
           batchInputItems.forEach(inputItem => {
@@ -160,9 +159,9 @@ export default function HomePage() {
                 fullData: originalFullItem.fullData,
                 feedbackText: originalFullItem.feedbackText,
                 timestamp: originalFullItem.timestamp,
-                sentiment: aiResult?.sentiment, // Will be undefined if AI didn't return this ID
-                sentimentScore: aiResult?.sentiment ? (aiResult.sentiment === 'positive' ? 1 : aiResult.sentiment === 'negative' ? -1 : 0) : undefined, // Basic score
-                topics: aiResult?.topics, // Will be undefined if AI didn't return this ID
+                sentiment: aiResult?.sentiment, 
+                sentimentScore: aiResult?.sentiment ? (aiResult.sentiment === 'positive' ? 1 : aiResult.sentiment === 'negative' ? -1 : 0) : undefined, 
+                topics: aiResult?.topics, 
               });
               if (aiResult) successfullyProcessedItemsCount++;
             }
@@ -171,26 +170,30 @@ export default function HomePage() {
         } catch (batchError: any) {
           const errorMessage = batchError instanceof Error ? batchError.message : String(batchError);
           const isRateLimitError = errorMessage.includes("429") || errorMessage.includes("Quota");
-          const toastMessage = isRateLimitError 
-            ? `Analysis for a batch of items failed due to API rate limits. Some results may be missing.`
-            : `Analysis for a batch of items failed: ${errorMessage.substring(0, 100)}. Check console.`;
+          
+          let toastMessage;
+          if (isRateLimitError) {
+            toastMessage = `Analysis for Batch ${currentBatchNumber} of ${totalBatchCount} failed due to API rate limits. Some results may be missing.`;
+          } else {
+            toastMessage = `Analysis for Batch ${currentBatchNumber} of ${totalBatchCount} failed: ${errorMessage.substring(0, 100)}. Check console.`;
+          }
           
           toast({
-            title: "Batch Analysis Error",
+            title: `Batch ${currentBatchNumber} Analysis Error`,
             description: toastMessage,
             variant: "destructive"
           });
-          if (isRateLimitError) console.warn("Batch analysis error:", errorMessage, batchError);
-          else console.error("Batch analysis error:", errorMessage, batchError);
-          // Continue to next batch, items in this failed batch won't be added
+
+          if (isRateLimitError) console.warn(`Batch ${currentBatchNumber} analysis error:`, errorMessage, batchError);
+          else console.error(`Batch ${currentBatchNumber} analysis error:`, errorMessage, batchError);
         }
-        setAnalysisProgress(Math.round(((i + batchInputItems.length) / totalItems) * 70)); // Batch analysis up to 70%
+        setAnalysisProgress(Math.round(((i + batchInputItems.length) / totalItems) * 70)); 
       }
       
       setAnalysisProgress(70);
 
       const insightsPayload = allAnalyzedData
-        .filter(item => item.sentiment && item.feedbackText) // Ensure item was successfully processed
+        .filter(item => item.sentiment && item.feedbackText) 
         .map(item => ({ text: item.feedbackText, sentiment: item.sentiment! }));
 
       let keyInsightsData: ProcessedFeedbackData['keyInsights'] = null;
@@ -213,7 +216,7 @@ export default function HomePage() {
            else console.error("Surface urgent issues failed:", errorMessage, e);
         }
       }
-      setAnalysisProgress(85); // Key insights step
+      setAnalysisProgress(85); 
 
       const sentimentCountsByDate: Record<string, { positive: number; negative: number; neutral: number }> = {};
       allAnalyzedData.forEach(item => {
@@ -246,7 +249,7 @@ export default function HomePage() {
           .sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
       }
       
-      setAnalysisProgress(95); // Chart data prep
+      setAnalysisProgress(95); 
 
       const topicSentimentCounts: Record<string, { positive: number; negative: number; neutral: number; total: number; }> = {};
       allAnalyzedData.forEach(item => {
@@ -279,7 +282,7 @@ export default function HomePage() {
         className: "bg-primary text-primary-foreground" 
       });
 
-    } catch (error: any) { // Catch errors from the overall analysis setup, not batch specific
+    } catch (error: any) { 
       console.error("Overall analysis failed:", error);
       const generalErrorMessage = error instanceof Error ? error.message : String(error);
       setAnalysisError(`Analysis failed: ${generalErrorMessage}`);
@@ -407,3 +410,4 @@ export default function HomePage() {
     </div>
   );
 }
+
