@@ -1,7 +1,10 @@
-// use server'
+// This file is no longer used as sentiment analysis is now part of the batch processing flow.
+// Kept for reference or if single-item analysis is needed elsewhere in the future.
+// Consider deleting if no longer relevant.
 'use server';
 /**
  * @fileOverview This file contains the Genkit flow for analyzing the sentiment of customer feedback.
+ * @deprecated Replaced by analyze-feedback-batch.ts
  *
  * - analyzeFeedbackSentiment - A function that analyzes the sentiment of customer feedback.
  * - AnalyzeFeedbackSentimentInput - The input type for the analyzeFeedbackSentiment function.
@@ -75,3 +78,4 @@ const analyzeFeedbackSentimentFlow = ai.defineFlow(
     return output!;
   }
 );
+
