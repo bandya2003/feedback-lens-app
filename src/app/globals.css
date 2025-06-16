@@ -4,35 +4,34 @@
 
 @layer base {
   :root {
-    --background: 203 17% 93%; /* Light Gray #ECEFF1 */
-    --foreground: 231 40% 15%; /* Darker text for better contrast on light gray */
-    --card: 0 0% 100%;
+    --background: 210 60% 97%; /* Very Light Cool Off-white */
+    --foreground: 231 40% 15%; 
+    --card: 0 0% 100%; /* White cards in light mode */
     --card-foreground: 231 40% 15%;
     --popover: 0 0% 100%;
     --popover-foreground: 231 40% 15%;
-    --primary: 231 48% 48%; /* Deep Blue #3F51B5 */
+    --primary: 231 48% 48%; 
     --primary-foreground: 0 0% 98%;
-    --secondary: 203 15% 88%; /* Slightly darker gray for secondary elements */
+    --secondary: 203 15% 88%; 
     --secondary-foreground: 231 40% 25%;
     --muted: 203 15% 88%;
     --muted-foreground: 231 40% 35%;
-    --accent: 260 45% 57%; /* Violet #7E57C2 */
+    --accent: 260 45% 57%; 
     --accent-foreground: 0 0% 98%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
-    --border: 203 10% 80%; /* Adjusted border for better visibility */
-    --input: 0 0% 100%; /* Inputs on light gray might need white background */
-    --input-border: 203 10% 75%; /* Specific border for inputs */
-    --ring: 231 48% 48%; /* Ring color to match primary */
-    --chart-1: 231 48% 48%; /* Primary for charts */
-    --chart-2: 260 45% 57%; /* Accent for charts */
-    --chart-3: 197 37% 44%; /* A complementary teal/blue */
+    --border: 203 10% 80%; 
+    --input: 0 0% 100%; 
+    --input-border: 203 10% 75%; 
+    --ring: 231 48% 48%; 
+    --chart-1: 231 48% 48%;
+    --chart-2: 260 45% 57%;
+    --chart-3: 197 37% 44%;
     --chart-4: 43 74% 66%;
     --chart-5: 27 87% 67%;
     --radius: 0.5rem;
 
-    /* Sidebar specific colors, can be adjusted or removed if sidebar isn't prominent */
-    --sidebar-background: 231 30% 25%; /* Darker blue for sidebar */
+    --sidebar-background: 231 30% 25%;
     --sidebar-foreground: 0 0% 95%;
     --sidebar-primary: 0 0% 98%;
     --sidebar-primary-foreground: 231 30% 25%;
@@ -43,20 +42,19 @@
   }
 
   .dark {
-    /* Dark theme variables */
-    --background: 240 10% 3.9%;
+    --background: 230 15% 10%; /* Deep Cool Dark Blue/Gray */
     --foreground: 0 0% 98%;
-    --card: 240 10% 3.9%;
+    --card: 230 15% 15%; /* Slightly lighter dark for cards */
     --card-foreground: 0 0% 98%;
-    --popover: 240 10% 3.9%;
+    --popover: 240 10% 3.9%; /* Keeping popover dark as original dark card */
     --popover-foreground: 0 0% 98%;
-    --primary: 231 48% 58%; /* Lighter blue for dark mode */
+    --primary: 231 48% 58%; 
     --primary-foreground: 231 40% 15%;
     --secondary: 240 3.7% 15.9%;
     --secondary-foreground: 0 0% 98%;
     --muted: 240 3.7% 15.9%;
     --muted-foreground: 240 5% 64.9%;
-    --accent: 260 45% 67%; /* Lighter violet for dark mode */
+    --accent: 260 45% 67%; 
     --accent-foreground: 0 0% 98%;
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 98%;
@@ -86,7 +84,6 @@
   body {
     @apply bg-background text-foreground;
   }
-  /* Custom input styles to use input-border */
   input, textarea, select {
     @apply border-input-border;
   }

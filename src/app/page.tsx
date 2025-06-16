@@ -365,8 +365,8 @@ export default function HomePage() {
 
   return (
     <div className="container mx-auto py-8 px-4 flex flex-col items-center min-h-screen">
-      <header className="w-full flex justify-between items-center mb-8 text-center">
-        <div className="flex-1 text-center"> {/* Centering the title */}
+      <header className="w-full flex justify-between items-start mb-8 text-center"> {/* Changed items-center to items-start */}
+        <div className="flex-1 text-center pt-1"> {/* Added pt-1 for slight alignment tweak if needed */}
           <h1 className="text-5xl font-bold font-headline text-primary flex items-center justify-center">
             <Sparkles className="w-12 h-12 mr-3 text-accent" />
             Feedback Lens
@@ -375,7 +375,7 @@ export default function HomePage() {
             AI-powered insights from your customer feedback.
           </p>
         </div>
-        <div className="ml-auto"> {/* Pushes the button to the right */}
+        <div className="ml-auto"> 
           <ThemeToggleButton />
         </div>
       </header>
@@ -407,4 +407,3 @@ export default function HomePage() {
     </div>
   );
 }
-
