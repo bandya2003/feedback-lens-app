@@ -10,7 +10,7 @@ import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Loader2, AlertCircle, Sparkles, FileUp, Brain, BarChart3 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { analyzeFeedbackBatch, AnalyzeFeedbackBatchInputItem, AnalyzeFeedbackBatchOutputItem } from '@/ai/flows/analyze-feedback-batch';
+import { analyzeFeedbackBatch, AnalyzeFeedbackBatchInput, AnalyzeFeedbackBatchInputItem, AnalyzeFeedbackBatchOutput, AnalyzeFeedbackBatchOutputItem } from '@/ai/flows/analyze-feedback-batch';
 import { surfaceUrgentIssues } from '@/ai/flows/surface-urgent-issues';
 import type { 
   RawFeedbackItem, 
@@ -137,7 +137,8 @@ export default function HomePage() {
       const totalBatchCount = Math.ceil(itemsToProcess.length / BATCH_SIZE);
       for (let i = 0; i < itemsToProcess.length; i += BATCH_SIZE) {
         const currentBatchNumber = Math.floor(i / BATCH_SIZE) + 1;
-        const batchInputItems = itemsToProcess.slice(i, i + BATCH_SIZE).map(item => ({
+        const batchToProcess = itemsToProcess.slice(i, i + BATCH_SIZE);
+        const batchInputItems: AnalyzeFeedbackBatchInput = batchToProcess.map(item => ({
           id: item.id,
           feedbackText: item.feedbackText
         }));
@@ -145,35 +146,37 @@ export default function HomePage() {
         if (batchInputItems.length === 0) continue;
 
         try {
-          const batchResults = await analyzeFeedbackBatch(batchInputItems);
+          const batchResults: AnalyzeFeedbackBatchOutput = await analyzeFeedbackBatch(batchInputItems);
           
           const resultsMap = new Map(batchResults.map(res => [res.id, res]));
 
-          batchInputItems.forEach(inputItem => {
-            const originalFullItem = itemsToProcess.find(orig => orig.id === inputItem.id);
-            if (originalFullItem) {
-              const aiResult = resultsMap.get(inputItem.id);
+          batchToProcess.forEach(originalItemInBatch => {
+              const aiResult = resultsMap.get(originalItemInBatch.id);
               allAnalyzedData.push({
-                id: originalFullItem.id,
-                originalIndex: originalFullItem.originalIndex,
-                fullData: originalFullItem.fullData,
-                feedbackText: originalFullItem.feedbackText,
-                timestamp: originalFullItem.timestamp,
+                id: originalItemInBatch.id,
+                originalIndex: originalItemInBatch.originalIndex,
+                fullData: originalItemInBatch.fullData,
+                feedbackText: originalItemInBatch.feedbackText,
+                timestamp: originalItemInBatch.timestamp,
                 sentiment: aiResult?.sentiment, 
                 sentimentScore: aiResult?.sentiment ? (aiResult.sentiment === 'positive' ? 1 : aiResult.sentiment === 'negative' ? -1 : 0) : undefined, 
                 topics: aiResult?.topics, 
               });
               if (aiResult) successfullyProcessedItemsCount++;
-            }
           });
 
         } catch (batchError: any) {
           const errorMessage = batchError instanceof Error ? batchError.message : String(batchError);
-          const isRateLimitError = errorMessage.includes("429") || errorMessage.includes("Quota");
+          const isApiLimitOrUnavailableError = 
+            errorMessage.includes("429") || 
+            errorMessage.includes("Quota") ||
+            errorMessage.includes("503") ||
+            errorMessage.toLowerCase().includes("service unavailable") ||
+            errorMessage.toLowerCase().includes("model is overloaded");
           
           let toastMessage;
-          if (isRateLimitError) {
-            toastMessage = `Analysis for Batch ${currentBatchNumber} of ${totalBatchCount} failed due to API rate limits. Some results may be missing.`;
+          if (isApiLimitOrUnavailableError) {
+            toastMessage = `Analysis for Batch ${currentBatchNumber} of ${totalBatchCount} failed due to API limits or service unavailability. Some results may be missing.`;
           } else {
             toastMessage = `Analysis for Batch ${currentBatchNumber} of ${totalBatchCount} failed: ${errorMessage.substring(0, 100)}. Check console.`;
           }
@@ -184,7 +187,7 @@ export default function HomePage() {
             variant: "destructive"
           });
 
-          if (isRateLimitError) console.warn(`Batch ${currentBatchNumber} analysis error:`, errorMessage, batchError);
+          if (isApiLimitOrUnavailableError) console.warn(`Batch ${currentBatchNumber} analysis error:`, errorMessage, batchError);
           else console.error(`Batch ${currentBatchNumber} analysis error:`, errorMessage, batchError);
         }
         setAnalysisProgress(Math.round(((i + batchInputItems.length) / totalItems) * 70)); 
@@ -202,17 +205,24 @@ export default function HomePage() {
           keyInsightsData = await surfaceUrgentIssues({ feedbackData: JSON.stringify(insightsPayload) });
         } catch (e: any) {
            const errorMessage = e instanceof Error ? e.message : String(e);
-           const isRateLimitError = errorMessage.includes("429 Too Many Requests") || errorMessage.includes("Quota");
+           const isApiLimitOrUnavailableErrorInsights = 
+             errorMessage.includes("429") || 
+             errorMessage.includes("Quota") ||
+             errorMessage.includes("503") ||
+             errorMessage.toLowerCase().includes("service unavailable") ||
+             errorMessage.toLowerCase().includes("model is overloaded");
 
-           const userFriendlyMessage = isRateLimitError
-            ? "Could not generate key insights due to API rate limits. Some insights might be unavailable."
+
+           const userFriendlyMessage = isApiLimitOrUnavailableErrorInsights
+            ? "Could not generate key insights due to API limits or service unavailability. Some insights might be unavailable."
             : `Could not generate key insights: ${errorMessage.substring(0,100)}. Check console for details.`;
-          toast({ 
+          
+           toast({ 
             title: "Key Insight Generation Limited", 
             description: userFriendlyMessage, 
             variant: "destructive" 
           });
-           if (isRateLimitError) console.warn("Key insight generation limited by API rate limits:", errorMessage);
+           if (isApiLimitOrUnavailableErrorInsights) console.warn("Key insight generation limited by API limits/unavailability:", errorMessage);
            else console.error("Surface urgent issues failed:", errorMessage, e);
         }
       }
