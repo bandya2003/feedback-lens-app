@@ -12,6 +12,7 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
+import { getClientUserId } from '@/lib/client-user-id'; // Import the new utility
 
 export default function HistoryPage() {
   const [reports, setReports] = useState<ListAnalysesOutputItem[]>([]);
@@ -21,14 +22,41 @@ export default function HistoryPage() {
 
   const [isCompareModeActive, setIsCompareModeActive] = useState(false);
   const [selectedReports, setSelectedReports] = useState<string[]>([]);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Ensure getClientUserId is called client-side
+    const id = getClientUserId();
+    if (id) {
+      setCurrentUserId(id);
+    } else {
+      // Handle case where ID couldn't be generated
+      console.warn("Could not retrieve client user ID for history page.");
+      setError("Could not establish a user session to load history.");
+      setLoading(false);
+      toast({
+        title: "User ID Issue",
+        description: "Could not establish a user session. Unable to load report history.",
+        variant: "destructive",
+        duration: 5000,
+      });
+    }
+  }, [toast]);
 
   useEffect(() => {
     async function fetchHistory() {
+      if (!currentUserId) {
+        // Don't attempt to fetch if userId is not set
+        // setError might have been set by the previous useEffect
+        if (!error) setError("User session not available to load history.");
+        setLoading(false);
+        return;
+      }
+
       setLoading(true);
       setError(null);
       try {
-        // For now, using a hardcoded userId. This will be replaced with actual user auth later.
-        const result = await listAnalyses({ userId: "demo_user_01" });
+        const result = await listAnalyses({ userId: currentUserId });
         setReports(result);
       } catch (e: any) {
         const errorMessage = e instanceof Error ? e.message : 'An unknown error occurred';
@@ -43,8 +71,11 @@ export default function HistoryPage() {
         setLoading(false);
       }
     }
-    fetchHistory();
-  }, [toast]);
+
+    if (currentUserId) { // Only fetch history if currentUserId is available
+        fetchHistory();
+    }
+  }, [currentUserId, toast, error]); // Add error to dependency array to avoid re-fetching if error already set
 
   const handleCompareModeToggle = (checked: boolean) => {
     setIsCompareModeActive(checked);
@@ -62,14 +93,13 @@ export default function HistoryPage() {
         if (prevSelected.length < 2) {
           return [...prevSelected, reportId];
         }
-        // If already 2 selected and trying to select a new one, show a toast.
         toast({
             title: "Selection Limit Reached",
             description: "You can only select up to two reports to compare.",
             variant: "default",
             duration: 3000,
         });
-        return prevSelected; // Do not add the third report
+        return prevSelected; 
       }
     });
   };
@@ -85,13 +115,18 @@ export default function HistoryPage() {
     );
   }
 
-  if (error) {
+  if (error && !loading) { // Ensure loading is false before showing error to prevent flash of loading then error
     return (
       <div className="flex flex-col items-center justify-center min-h-[calc(100vh-200px)] text-center">
         <AlertCircle className="h-16 w-16 text-destructive mb-6" />
         <h2 className="text-2xl font-headline mb-2 text-destructive">Error Loading History</h2>
         <p className="text-muted-foreground mb-4">{error}</p>
-        <Button onClick={() => window.location.reload()}>Try Again</Button>
+        <Button onClick={() => {
+            const id = getClientUserId(); // Attempt to re-fetch/re-initialize
+            if (id) setCurrentUserId(id);
+            setError(null); // Clear error to allow re-fetch attempt
+            setLoading(true); // Set loading to true to trigger fetch
+        }}>Try Again</Button>
       </div>
     );
   }
@@ -133,7 +168,7 @@ export default function HistoryPage() {
           <FileText className="h-20 w-20 text-muted-foreground mb-6" />
           <h2 className="text-2xl font-headline mb-3 text-foreground">No Saved Reports Yet</h2>
           <p className="text-muted-foreground mb-6 max-w-md">
-            It looks like you haven't saved any analysis reports. Perform an analysis and save it to see it here.
+            It looks like you haven't saved any analysis reports for this session. Perform an analysis and save it to see it here.
           </p>
           <Button asChild size="lg">
             <Link href="/">
@@ -179,7 +214,7 @@ export default function HistoryPage() {
                     />
                   </div>
                 )}
-                <CardHeader className={cn(isCompareModeActive && "pr-10")}> {/* Add padding if checkbox is present */}
+                <CardHeader className={cn(isCompareModeActive && "pr-10")}> 
                   <CardTitle className="font-headline text-xl truncate" title={report.name}>
                     {report.name}
                   </CardTitle>
@@ -188,7 +223,6 @@ export default function HistoryPage() {
                 <CardContent>
                   <p className="text-sm text-muted-foreground">Report ID: {report.id.substring(0,8)}...</p>
                 </CardContent>
-                {/* Future: Add a button to view the full report, e.g., <Button asChild className="w-full mt-2"><Link href={`/dashboard/${report.id}`}>View Report</Link></Button> */}
               </Card>
             );
           })}

@@ -11,11 +11,12 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, AlertCircle, FileUp, Brain, BarChart3, Save } from 'lucide-react'; // Removed Sparkles as it's in global Header
+import { Loader2, AlertCircle, FileUp, Brain, BarChart3, Save } from 'lucide-react'; 
 import { useToast } from '@/hooks/use-toast';
 import { analyzeFeedbackBatch, AnalyzeFeedbackBatchInput, AnalyzeFeedbackBatchOutput } from '@/ai/flows/analyze-feedback-batch';
 import { surfaceUrgentIssues } from '@/ai/flows/surface-urgent-issues';
 import { saveAnalysis, SaveAnalysisInput, ProcessedFeedbackDataForSave } from '@/ai/flows/save-analysis-flow.ts'; 
+import { getClientUserId } from '@/lib/client-user-id'; // Import the new utility
 import type {
   RawFeedbackItem,
   FeedbackItem,
@@ -24,7 +25,7 @@ import type {
   SentimentDataPoint,
   TopicSentimentDistribution
 } from '@/types/feedback';
-// Removed ThemeToggleButton import as it's in global Header
+
 
 // Basic CSV parser
 function parseCSV(text: string): { headers: string[]; rows: RawFeedbackItem[] } {
@@ -80,8 +81,28 @@ export default function HomePage() {
   const [isSaveDialogOpen, setIsSaveDialogOpen] = useState(false);
   const [currentAnalysisName, setCurrentAnalysisName] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   const { toast } = useToast();
+
+  useEffect(() => {
+    // Ensure getClientUserId is called client-side
+    const id = getClientUserId();
+    if (id) {
+      setCurrentUserId(id);
+    } else {
+      // Handle case where ID couldn't be generated (e.g., SSR or no localStorage)
+      // For a prototype, we might disable saving or show a warning.
+      console.warn("Could not retrieve client user ID. Saving reports might not work as expected.");
+      toast({
+        title: "User ID Issue",
+        description: "Could not establish a user session. Saved reports might not be linked to you.",
+        variant: "destructive",
+        duration: 5000,
+      });
+    }
+  }, [toast]);
+
 
   const handleFileSelect = useCallback(async (selectedFile: File) => {
     setFile(selectedFile);
@@ -166,7 +187,7 @@ export default function HomePage() {
                 originalIndex: originalItemInBatch.originalIndex,
                 fullData: originalItemInBatch.fullData,
                 feedbackText: originalItemInBatch.feedbackText,
-                timestamp: originalItemInBatch.timestamp,
+                timestamp: originalItemInBatch.timestamp, // This is a Date object or undefined
                 sentiment: aiResult?.sentiment, 
                 sentimentScore: aiResult?.sentiment ? (aiResult.sentiment === 'positive' ? 1 : aiResult.sentiment === 'negative' ? -1 : 0) : undefined, 
                 topics: aiResult?.topics, 
@@ -319,8 +340,19 @@ export default function HomePage() {
       });
       return;
     }
+
+    if (!currentUserId) {
+      toast({
+        title: "Cannot Save Report",
+        description: "User session ID is missing. Please refresh the page and try again.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsSaving(true);
     try {
+      // Convert Date objects in feedbackItems to ISO strings before saving
       const processedDataForSave: ProcessedFeedbackDataForSave = {
         ...processedData,
         feedbackItems: processedData.feedbackItems.map(item => ({
@@ -330,7 +362,7 @@ export default function HomePage() {
       };
 
       const input: SaveAnalysisInput = {
-        userId: "demo_user_01", 
+        userId: currentUserId, // Use the dynamic userId
         analysisName: currentAnalysisName.trim(),
         sourceFileName: file.name,
         processedData: processedDataForSave,
@@ -366,6 +398,7 @@ export default function HomePage() {
     setCurrentAnalysisName('');
     setIsSaveDialogOpen(false);
     setIsSaving(false);
+    // Note: currentUserId remains, as it's tied to the browser session
   };
   
   const renderContent = () => {
@@ -433,9 +466,8 @@ export default function HomePage() {
 
   return (
     <div className="container mx-auto py-8 px-4 flex flex-col items-center min-h-screen">
-      {/* Local page header removed, global header in layout.tsx will handle title and theme toggle */}
       
-      <div className="w-full max-w-7xl"> {/* Changed from <main> to <div> for more flexibility if needed */}
+      <div className="w-full max-w-7xl"> 
         {analysisError && (
           <Alert variant="destructive" className="mb-6">
             <AlertCircle className="h-4 w-4" />
@@ -445,7 +477,6 @@ export default function HomePage() {
         )}
         {renderContent()}
 
-        {/* Action buttons area */}
         <div className="mt-8 text-center space-x-4">
             {(currentStage === 'dashboard' || (currentStage === 'map_columns' && csvRows.length > 0) || (currentStage === 'upload' && file)) && (
                 <Button variant="outline" onClick={handleReset} disabled={currentStage === 'analyzing' || isSaving}>
@@ -456,7 +487,7 @@ export default function HomePage() {
             {currentStage === 'dashboard' && processedData && (
                 <Dialog open={isSaveDialogOpen} onOpenChange={setIsSaveDialogOpen}>
                     <DialogTrigger asChild>
-                        <Button variant="default" disabled={isSaving}>
+                        <Button variant="default" disabled={isSaving || !currentUserId}>
                             <Save className="mr-2 h-4 w-4" />
                             {isSaving ? 'Saving...' : 'Save Current Analysis'}
                         </Button>
@@ -465,7 +496,7 @@ export default function HomePage() {
                         <DialogHeader>
                         <DialogTitle>Save Analysis Report</DialogTitle>
                         <DialogDescription>
-                            Enter a name for this analysis report. This will save the current dashboard view.
+                            Enter a name for this analysis report. This will save the current dashboard view for your session.
                         </DialogDescription>
                         </DialogHeader>
                         <div className="grid gap-4 py-4">
@@ -488,7 +519,7 @@ export default function HomePage() {
                                 Cancel
                             </Button>
                           </DialogClose>
-                          <Button type="button" onClick={handleSaveAnalysisConfirmed} disabled={isSaving || !currentAnalysisName.trim()}>
+                          <Button type="button" onClick={handleSaveAnalysisConfirmed} disabled={isSaving || !currentAnalysisName.trim() || !currentUserId}>
                               {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                               Save Report
                           </Button>
